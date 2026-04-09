@@ -146,7 +146,7 @@ func (m *Model) jobsView() string {
 	b.WriteString(dimText.Render("  "))
 	b.WriteString(whiteBold.Render(pad("JOB", 36)))
 	b.WriteString(dimText.Render("  "))
-	b.WriteString(whiteBold.Render("NEXT"))
+	b.WriteString(whiteBold.Render(center("NEXT", 10)))
 	b.WriteString(dimText.Render("   "))
 	b.WriteString(whiteBold.Render(center("EVERY", 15)))
 	b.WriteString(dimText.Render("  "))
@@ -157,7 +157,7 @@ func (m *Model) jobsView() string {
 
 	// Divider
 	b.WriteString(bg.Render(" "))
-	b.WriteString(dimText.Render("  " + strings.Repeat("─", 36) + "  " + strings.Repeat("─", 9) + "  " + strings.Repeat("─", 15) + "  " + strings.Repeat("─", 7) + "  " + strings.Repeat("─", 12)))
+	b.WriteString(dimText.Render("  " + strings.Repeat("─", 36) + "  " + strings.Repeat("─", 10) + "  " + strings.Repeat("─", 15) + "  " + strings.Repeat("─", 7) + "  " + strings.Repeat("─", 12)))
 	b.WriteString(bg.Render("\n"))
 
 	// Jobs
@@ -199,7 +199,7 @@ func jobRow(job ssh.Job, selected bool) string {
 	if job.State == "running" {
 		nextDisplay = blue.Render("RUNNING")
 	} else {
-		nextDisplay = cyan.Render(pad(job.NextRun, 9))
+		nextDisplay = cyan.Render(center(job.NextRun, 10))
 	}
 
 	// Name

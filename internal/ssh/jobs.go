@@ -3,7 +3,6 @@ package ssh
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -28,10 +27,10 @@ type Job struct {
 	ID             string
 	Name           string
 	Schedule       string
-	ScheduleHuman  string // "daily 9:00", "twice (11:00, 22:00)", etc.
+	ScheduleHuman  string
 	Repeat         string
 	NextRun        string
-	NextRunHuman   string // "in 2h 30m"
+	NextRunHuman   string
 	Deliver        string
 	DeliverTag     string
 	LastRun        string
@@ -42,6 +41,8 @@ func FetchJobs(cfg Config) ([]Job, error) {
 	cmd := exec.Command("ssh",
 		"-o", "StrictHostKeyChecking=no",
 		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "BatchMode=yes",
+		"-o", "LogLevel=ERROR",
 		"-p", fmt.Sprintf("%d", cfg.Port),
 	)
 	if cfg.KeyPath != "" {
@@ -53,8 +54,10 @@ func FetchJobs(cfg Config) ([]Job, error) {
 	)
 
 	var out bytes.Buffer
+	// Silencing SSH warnings — host-key warnings are expected on first connect
+	// and don't affect functionality. Real errors still cause cmd.Run to fail.
 	cmd.Stdout = &out
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = bytes.NewBuffer(nil)
 
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("ssh failed: %w", err)
@@ -178,7 +181,6 @@ func parseJobBlock(block string) (Job, error) {
 	return job, nil
 }
 
-// cronToHuman converts cron expr like "0 9 * * *" → "daily 9:00"
 func cronToHuman(schedule string) string {
 	fields := strings.Fields(schedule)
 	if len(fields) < 5 {
@@ -191,12 +193,10 @@ func cronToHuman(schedule string) string {
 	month := fields[3]
 	dow := fields[4]
 
-	// every X hours: 0 */12 * * * → "every 12h"
 	if min == "0" && strings.HasPrefix(hour, "*/") {
 		return fmt.Sprintf("every %sh", strings.TrimPrefix(hour, "*/"))
 	}
 
-	// twice daily: 0 11,16 * * * → "twice (11:00, 16:00)"
 	if min == "0" && strings.Contains(hour, ",") {
 		var formatted []string
 		for _, p := range strings.Split(hour, ",") {
@@ -208,23 +208,20 @@ func cronToHuman(schedule string) string {
 		return "twice (" + strings.Join(formatted, ", ") + ")"
 	}
 
-	// weekly: dom=* month=* dow!=*
 	if dom == "*" && month == "*" && dow != "*" {
-		return fmt.Sprintf("weekly (Sun)", dow)
+		return fmt.Sprintf("weekly (%s)", dow)
 	}
 
-	// daily at time: 0 9 * * * → "daily 9:00"
 	if dom == "*" && month == "*" && dow == "*" {
-		if min != "0" {
-			return fmt.Sprintf("daily %s:%s", hour, min)
+		if min == "0" {
+			return fmt.Sprintf("daily %s:00", hour)
 		}
-		return fmt.Sprintf("daily %s:00", hour)
+		return fmt.Sprintf("daily %s:%s", hour, min)
 	}
 
 	return schedule
 }
 
-// humanDuration converts an ISO timestamp to "in Xh Ym" or "in Nm"
 func humanDuration(ts string) string {
 	t, err := time.Parse("2006-01-02T15:04:05Z07:00", ts)
 	if err != nil {

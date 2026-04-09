@@ -196,7 +196,7 @@ func jobRow(job ssh.Job, selected bool) string {
 	}
 
 	// Every column
-	every := job.ScheduleHuman
+	every := job.Schedule
 
 	// Name
 	nameStyle := white
@@ -212,7 +212,7 @@ func jobRow(job ssh.Job, selected bool) string {
 	return bg.Render(prefix) +
 		nameStyle.Render(pad(trunc(job.Name, 37), 38)) +
 		bg.Render("  ") +
-		cyan.Render(pad(job.NextRunHuman, 9)) +
+		cyan.Render(pad(job.NextRun, 9)) +
 		bg.Render("  ") +
 		amber.Render(pad(every, 13)) +
 		bg.Render("  ") +

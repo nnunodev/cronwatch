@@ -28,10 +28,10 @@ type Config struct {
 type Job struct {
 	ID            string
 	Name          string
-	Schedule      string
-	ScheduleHuman string // "daily 9:00", "twice (11:00, 16:00)", etc.
-	NextRun       string
-	NextRunHuman  string // "in 2h 30m"
+	ScheduleExpr  string
+	Schedule string // "daily 9:00", "twice (11:00, 16:00)", etc.
+	NextRunAt    string
+	NextRun  string // "in 2h 30m"
 	Deliver       string
 	DeliverTag    string
 	LastRun       string
@@ -152,12 +152,12 @@ func parseJobBlock(block string) (Job, error) {
 		if strings.HasPrefix(line, "ID:") {
 			job.ID = strings.TrimSpace(strings.TrimPrefix(line, "ID:"))
 		} else if strings.HasPrefix(line, "SCHEDULE|") {
-			job.Schedule = strings.TrimSpace(strings.TrimPrefix(line, "SCHEDULE|"))
-			job.ScheduleHuman = cronToHuman(job.Schedule)
+			job.ScheduleExpr = strings.TrimSpace(strings.TrimPrefix(line, "SCHEDULE|"))
+			job.Schedule = cronToHuman(job.ScheduleExpr)
 		} else if strings.HasPrefix(line, "NEXT|") {
 			nextRaw := strings.TrimSpace(strings.TrimPrefix(line, "NEXT|"))
-			job.NextRun = nextRaw
-			job.NextRunHuman = humanDuration(nextRaw)
+			job.NextRunAt = nextRaw
+			job.NextRun = humanDuration(nextRaw)
 		} else if strings.HasPrefix(line, "DELIVER|") {
 			job.Deliver = strings.TrimSpace(strings.TrimPrefix(line, "DELIVER|"))
 			job.DeliverTag = deliverTag(job.Deliver)
@@ -298,7 +298,7 @@ func RenderSimple(jobs []Job) {
 		if j.LastState == "error" {
 			state = red.Render("error")
 		}
-		fmt.Printf("  %-45s %s  %s\n", j.Name, amber.Render(j.ScheduleHuman), cyan.Render(j.NextRunHuman))
+		fmt.Printf("  %-45s %s  %s\n", j.Name, amber.Render(j.Schedule), cyan.Render(j.NextRun))
 		fmt.Printf("  %s  %s\n\n", muted.Render("→ "+j.DeliverTag), state)
 	}
 }
@@ -308,20 +308,20 @@ func sortJobsByNextRun(jobs []Job) []Job {
 	sorted := make([]Job, len(jobs))
 	copy(sorted, jobs)
 	sort.Slice(sorted, func(i, j int) bool {
-		ti, err := time.Parse(time.RFC3339, sorted[i].NextRun)
+		ti, err := time.Parse(time.RFC3339, sorted[i].NextRunAt)
 		if err != nil {
-			ti2, err2 := time.Parse("2006-01-02T15:04:05Z07:00", sorted[i].NextRun)
+			ti2, err2 := time.Parse("2006-01-02T15:04:05Z07:00", sorted[i].NextRunAt)
 			if err2 != nil {
-				log.Printf("sort: could not parse NextRun %q for job %q: %v", sorted[i].NextRun, sorted[i].Name, err2)
+				log.Printf("sort: could not parse NextRun %q for job %q: %v", sorted[i].NextRunAt, sorted[i].Name, err2)
 				return false
 			}
 			ti = ti2
 		}
-		tj, err := time.Parse(time.RFC3339, sorted[j].NextRun)
+		tj, err := time.Parse(time.RFC3339, sorted[j].NextRunAt)
 		if err != nil {
-			tj2, err2 := time.Parse("2006-01-02T15:04:05Z07:00", sorted[j].NextRun)
+			tj2, err2 := time.Parse("2006-01-02T15:04:05Z07:00", sorted[j].NextRunAt)
 			if err2 != nil {
-				log.Printf("sort: could not parse NextRun %q for job %q: %v", sorted[j].NextRun, sorted[j].Name, err2)
+				log.Printf("sort: could not parse NextRun %q for job %q: %v", sorted[j].NextRunAt, sorted[j].Name, err2)
 				return false
 			}
 			tj = tj2

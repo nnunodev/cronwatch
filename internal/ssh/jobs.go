@@ -215,7 +215,7 @@ func cronToHuman(schedule string) string {
 			}
 			formatted = append(formatted, fmt.Sprintf("%s:00", p))
 		}
-		return "twice (" + strings.Join(formatted, ", ") + ")"
+		return "(" + strings.Join(formatted, ", ") + ")"
 	}
 	if dom == "*" && month == "*" && dow != "*" {
 		return fmt.Sprintf("weekly (%s)", dow)

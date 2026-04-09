@@ -148,7 +148,7 @@ func (m *Model) jobsView() string {
 	b.WriteString(dimText.Render("  "))
 	b.WriteString(whiteBold.Render("NEXT"))
 	b.WriteString(dimText.Render("   "))
-	b.WriteString(whiteBold.Render(center("EVERY", 13)))
+	b.WriteString(whiteBold.Render(center("EVERY", 15)))
 	b.WriteString(dimText.Render("  "))
 	b.WriteString(whiteBold.Render(center("STATUS", 7)))
 	b.WriteString(dimText.Render("  "))
@@ -157,7 +157,7 @@ func (m *Model) jobsView() string {
 
 	// Divider
 	b.WriteString(bg.Render(" "))
-	b.WriteString(dimText.Render("  " + strings.Repeat("─", 36) + "  " + strings.Repeat("─", 9) + "  " + strings.Repeat("─", 13) + "  " + strings.Repeat("─", 7) + "  " + strings.Repeat("─", 14)))
+	b.WriteString(dimText.Render("  " + strings.Repeat("─", 36) + "  " + strings.Repeat("─", 9) + "  " + strings.Repeat("─", 15) + "  " + strings.Repeat("─", 7) + "  " + strings.Repeat("─", 14)))
 	b.WriteString(bg.Render("\n"))
 
 	// Jobs
@@ -221,7 +221,7 @@ func jobRow(job ssh.Job, selected bool) string {
 		bg.Render("  ") +
 		nextDisplay +
 		bg.Render("  ") +
-		amber.Render(pad(job.Schedule, 13)) +
+		amber.Render(center(job.Schedule, 15)) +
 		bg.Render("  ") +
 		dot +
 		statusText +

@@ -152,12 +152,12 @@ func (m *Model) jobsView() string {
 	b.WriteString(dimText.Render("  "))
 	b.WriteString(whiteBold.Render(center("STATUS", 12)))
 	b.WriteString(dimText.Render("  "))
-	b.WriteString(whiteBold.Render(center("TRIGGERED", 12)))
+	b.WriteString(whiteBold.Render(center("TRIGGERED", 14)))
 	b.WriteString(bg.Render("\n"))
 
 	// Divider
 	b.WriteString(bg.Render(" "))
-	b.WriteString(dimText.Render("  " + strings.Repeat("─", 36) + "  " + strings.Repeat("─", 10) + "  " + strings.Repeat("─", 15) + "  " + strings.Repeat("─", 12) + "  " + strings.Repeat("─", 12)))
+	b.WriteString(dimText.Render("  " + strings.Repeat("─", 36) + "  " + strings.Repeat("─", 10) + "  " + strings.Repeat("─", 15) + "  " + strings.Repeat("─", 12) + "  " + strings.Repeat("─", 14)))
 	b.WriteString(bg.Render("\n"))
 
 	// Jobs
@@ -219,7 +219,7 @@ func jobRow(job ssh.Job, selected bool) string {
 
 	// Triggered column
 	var triggered string
-	triggeredRaw := center(job.LastRunAtH, 12)
+	triggeredRaw := center(job.LastRunAtH, 14)
 	if selected {
 		triggered = accent.Render(triggeredRaw)
 	} else {

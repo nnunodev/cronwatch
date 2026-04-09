@@ -240,7 +240,7 @@ func humanDuration(ts string) string {
 	}
 	diff := time.Until(t)
 	if diff < 0 {
-		return "executing"
+		return "overdue"
 	}
 
 	h := int(diff.Hours())

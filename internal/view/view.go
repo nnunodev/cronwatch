@@ -151,11 +151,13 @@ func (m *Model) jobsView() string {
 	b.WriteString(whiteBold.Render(center("EVERY", 13)))
 	b.WriteString(dimText.Render("  "))
 	b.WriteString(whiteBold.Render(center("STATUS", 7)))
-		b.WriteString(bg.Render("\n"))
+	b.WriteString(dimText.Render("  "))
+	b.WriteString(whiteBold.Render(center("TRIGGERED", 14)))
+	b.WriteString(bg.Render("\n"))
 
 	// Divider
 	b.WriteString(bg.Render(" "))
-	b.WriteString(dimText.Render("  " + strings.Repeat("─", 36) + "  " + strings.Repeat("─", 9) + "  " + strings.Repeat("─", 13) + "  " + strings.Repeat("─", 7)))
+	b.WriteString(dimText.Render("  " + strings.Repeat("─", 36) + "  " + strings.Repeat("─", 9) + "  " + strings.Repeat("─", 13) + "  " + strings.Repeat("─", 7) + "  " + strings.Repeat("─", 14)))
 	b.WriteString(bg.Render("\n"))
 
 	// Jobs

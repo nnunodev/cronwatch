@@ -191,6 +191,9 @@ func jobRow(job ssh.Job, selected bool) string {
 		statusText = greenBold.Render("ok")
 	}
 
+	// Pad status to fixed width so dots align regardless of text length
+	padStatus := dot + statusText + strings.Repeat(" ", max(0, 6-len([]rune(dot+statusText))))
+
 	// Next run column
 	var nextDisplay string
 	if job.State == "running" {
@@ -223,8 +226,7 @@ func jobRow(job ssh.Job, selected bool) string {
 		bg.Render("  ") +
 		amber.Render(center(job.Schedule, 15)) +
 		bg.Render("  ") +
-		dot +
-		statusText +
+		padStatus +
 		bg.Render("  ") +
 		triggered
 }

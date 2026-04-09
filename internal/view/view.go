@@ -99,23 +99,28 @@ func (m *Model) autoRefresh() tea.Cmd {
 // ─── Styles ───────────────────────────────────────────────────────────────
 
 var (
-	bg            = lipgloss.NewStyle().Background(lipgloss.Color("#0b1020"))
-	bgDim         = lipgloss.NewStyle().Background(lipgloss.Color("#0b1020")).MarginTop(1)
-	muted         = lipgloss.NewStyle().Foreground(lipgloss.Color("#6b7280"))
-	white         = lipgloss.NewStyle().Foreground(lipgloss.Color("#e5e7eb"))
-	whiteBold     = lipgloss.NewStyle().Foreground(lipgloss.Color("#f9fafb")).Bold(true)
-	orange        = lipgloss.NewStyle().Foreground(lipgloss.Color("#f97316")).Bold(true)
-	cyan          = lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee"))
-	amber         = lipgloss.NewStyle().Foreground(lipgloss.Color("#fbbf24"))
-	green         = lipgloss.NewStyle().Foreground(lipgloss.Color("#10b981")).Bold(true)
-	red           = lipgloss.NewStyle().Foreground(lipgloss.Color("#f87171")).Bold(true)
-	accent        = lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee"))
-	selectedRow   = lipgloss.NewStyle().Background(lipgloss.Color("#172033"))
-	tagStyle      = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#374151")).
-				Background(lipgloss.Color("#1f2937")).
-				Padding(0, 1).
-				MarginRight(1)
+	bg          = lipgloss.NewStyle().Background(lipgloss.Color("#0b1020"))
+	muted       = lipgloss.NewStyle().Foreground(lipgloss.Color("#4b5563"))
+	dimText     = lipgloss.NewStyle().Foreground(lipgloss.Color("#6b7280"))
+	white       = lipgloss.NewStyle().Foreground(lipgloss.Color("#e5e7eb"))
+	whiteBold   = lipgloss.NewStyle().Foreground(lipgloss.Color("#f9fafb")).Bold(true)
+	orange      = lipgloss.NewStyle().Foreground(lipgloss.Color("#f97316")).Bold(true)
+	cyan        = lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee"))
+	amber       = lipgloss.NewStyle().Foreground(lipgloss.Color("#fbbf24"))
+	green       = lipgloss.NewStyle().Foreground(lipgloss.Color("#10b981"))
+	greenBold   = lipgloss.NewStyle().Foreground(lipgloss.Color("#10b981")).Bold(true)
+	red         = lipgloss.NewStyle().Foreground(lipgloss.Color("#f87171")).Bold(true)
+	accent      = lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee"))
+	tagStyle    = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#d1d5db")).
+			Background(lipgloss.Color("#1f2937")).
+			Padding(0, 1).
+			MarginLeft(1)
+	tagErrorStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#fecaca")).
+			Background(lipgloss.Color("#7f1d1d")).
+			Padding(0, 1).
+			MarginLeft(1)
 )
 
 // ─── View ─────────────────────────────────────────────────────────────────
@@ -136,111 +141,94 @@ func (m *Model) jobsView() string {
 	// Header
 	b.WriteString(bg.Render(" "))
 	b.WriteString(orange.Render("SCHEDULED JOBS"))
-	b.WriteString(muted.Render("  ·  ") + muted.Render(m.cfg.Host))
-	b.WriteString(bg.Render("\n\n"))
+	b.WriteString(dimText.Render("  ·  hyperion"))
+	b.WriteString(bg.Render("\n"))
 
 	// Column labels
 	b.WriteString(bg.Render(" "))
-	b.WriteString(muted.Render("  "))
-	b.WriteString(whiteBold.Render(pad("NAME", 40)))
-	b.WriteString(muted.Render(" "))
+	b.WriteString(dimText.Render("  "))
+	b.WriteString(whiteBold.Render(pad("JOB", 38)))
+	b.WriteString(dimText.Render("  "))
 	b.WriteString(whiteBold.Render("NEXT"))
-	b.WriteString(muted.Render("      "))
+	b.WriteString(dimText.Render("   "))
 	b.WriteString(whiteBold.Render("EVERY"))
-	b.WriteString(muted.Render("  "))
+	b.WriteString(dimText.Render("  "))
 	b.WriteString(whiteBold.Render("STATUS"))
-	b.WriteString(muted.Render("  "))
-	b.WriteString(whiteBold.Render("TARGET"))
 	b.WriteString(bg.Render("\n"))
 
 	// Divider
 	b.WriteString(bg.Render(" "))
-	b.WriteString(muted.Render("  " + strings.Repeat("─", 40) + "  " + strings.Repeat("─", 10) + "  " + strings.Repeat("─", 13) + "  " + strings.Repeat("─", 8) + "  " + strings.Repeat("─", 10)))
+	b.WriteString(dimText.Render("  " + strings.Repeat("─", 38) + "  " + strings.Repeat("─", 9) + "  " + strings.Repeat("─", 13) + "  " + strings.Repeat("─", 7)))
 	b.WriteString(bg.Render("\n"))
 
 	// Jobs
 	for i, job := range m.jobs {
-		b.WriteString(jobLine(job, i == m.selectedIndex))
+		b.WriteString(jobRow(job, i == m.selectedIndex))
 		b.WriteString(bg.Render("\n"))
 	}
 
 	// Footer
 	b.WriteString(bg.Render("\n"))
 	b.WriteString(green.Render("● "+m.lastRefresh))
-	b.WriteString(muted.Render("  ·  "))
-	b.WriteString(muted.Render(fmt.Sprintf("%d jobs", len(m.jobs))))
-	b.WriteString(muted.Render("  ·  ↑↓ navigate  r refresh  q quit"))
+	b.WriteString(dimText.Render("  ·  "))
+	b.WriteString(dimText.Render(fmt.Sprintf("%d jobs", len(m.jobs))))
+	b.WriteString(dimText.Render("  ·  ↑↓ navigate  r refresh  q quit"))
 	b.WriteString(bg.Render("\n"))
 
 	return b.String()
 }
 
-func jobLine(job ssh.Job, selected bool) string {
-	// Status dot + label
-	statusDot := green.Render("●")
-	statusLabel := green.Render("active")
+func jobRow(job ssh.Job, selected bool) string {
+	// Status
+	dot := greenBold.Render("●")
+	statusText := greenBold.Render("ok")
 	if job.LastState == "error" {
-		statusDot = red.Render("●")
-		statusLabel = red.Render("error")
+		dot = red.Render("●")
+		statusText = red.Render("error")
 	}
 
-	// Name style
+	// Target tag
+	tag := tagStyle.Render(job.DeliverTag)
+	if job.LastState == "error" {
+		tag = tagErrorStyle.Render("✗")
+	}
+
+	// Every column
+	every := cronToHuman(job.Schedule)
+
+	// Name
 	nameStyle := white
 	if selected {
 		nameStyle = accent
 	}
 
-	// Target tag
-	targetTag := tagStyle.Render(job.DeliverTag)
-
-	// Every column — human-readable cron
-	every := cronToHuman(job.Schedule)
-	if every == "" {
-		every = job.Schedule
-	}
-
-	// Build the line
 	prefix := " "
 	if selected {
 		prefix = ">"
 	}
 
-	line := bg.Render(prefix) +
-		nameStyle.Render(pad(trunc(job.Name, 39), 40)) +
+	return bg.Render(prefix) +
+		nameStyle.Render(pad(trunc(job.Name, 37), 38)) +
 		bg.Render("  ") +
-		cyan.Render(pad(job.NextRunHuman, 10)) +
+		cyan.Render(pad(job.NextRunHuman, 9)) +
 		bg.Render("  ") +
 		amber.Render(pad(every, 13)) +
 		bg.Render("  ") +
-		statusDot +
-		statusLabel +
-		bg.Render("  ") +
-		muted.Render(job.DeliverTag) +
-		bg.Render("  ") +
-		targetTag
-
-	// Last run on second line
-	lastLine := bg.Render(" ") +
-		muted.Render("  last:  " + job.LastRun + "  " + job.LastState)
-
-	if selected {
-		lastLine = bg.Render(" ") +
-			accent.Render("  last:  " + job.LastRun + "  " + job.LastState)
-	}
-
-	return line + "\n" + lastLine
+		dot +
+		statusText +
+		tag
 }
 
 func (m *Model) loadingView() string {
 	frames := []rune{'-', '\\', '|', '/'}
-	return bg.Render("\n\n  ") + cyan.Render(fmt.Sprintf("Loading from Hyperion %c", frames[m.refreshFrame%4])) + bg.Render("\n\n")
+	return bg.Render("\n\n  ") + cyan.Render(fmt.Sprintf("loading from hyperion %c", frames[m.refreshFrame%4])) + bg.Render("\n\n")
 }
 
 func (m *Model) errorView() string {
-	return bg.Render("\n  ") + red.Render("✗ "+m.lastError) + bg.Render("\n\n  ") + muted.Render("r — retry  ·  q — quit\n\n")
+	return bg.Render("\n  ") + red.Render("✗ "+m.lastError) + bg.Render("\n\n  ") + dimText.Render("r — retry  ·  q — quit\n\n")
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────────
 
 func trunc(s string, max int) string {
 	runes := []rune(s)
@@ -258,7 +246,7 @@ func pad(s string, width int) string {
 	return s + strings.Repeat(" ", width-len(runes))
 }
 
-// cronToHuman converts a cron expression to a human-readable interval
+// cronToHuman converts cron expr like "0 9 * * *" → "daily 9:00"
 func cronToHuman(schedule string) string {
 	fields := strings.Fields(schedule)
 	if len(fields) < 5 {
@@ -271,33 +259,35 @@ func cronToHuman(schedule string) string {
 	month := fields[3]
 	dow := fields[4]
 
-	// daily: 0 9 * * *
-	if min != "*" && hour != "*" && dom == "*" && month == "*" && dow == "*" {
-		return fmt.Sprintf("daily %s:%s", hour, min)
-	}
-
-	// every X hours: 0 */12 * * *
-	if min != "*" && strings.HasPrefix(hour, "*/") && dom == "*" && month == "*" && dow == "*" {
+	// every X hours: 0 */12 * * * → "every 12h"
+	if min == "0" && strings.HasPrefix(hour, "*/") {
 		h := strings.TrimPrefix(hour, "*/")
 		return fmt.Sprintf("every %sh", h)
 	}
 
-	// weekdays at time: 0 9 * * 1-5
-	if dom == "*" && month == "*" && dow != "*" && dow != "*" {
-		if min != "*" && hour != "*" {
-			return fmt.Sprintf("%s:%s %s", hour, min, dow)
+	// twice daily: 0 11,16 * * * → "twice (11:00, 16:00)"
+	if min == "0" && strings.Contains(hour, ",") {
+		parts := strings.Split(hour, ",")
+		var formatted []string
+		for _, p := range parts {
+			if len(p) == 1 {
+				p = "0" + p
+			}
+			formatted = append(formatted, fmt.Sprintf("%s:00", p))
 		}
+		return "twice (" + strings.Join(formatted, ", ") + ")"
 	}
 
-	// twice daily: 0 11,16 * * *
-	if strings.Contains(hour, ",") && dom == "*" && month == "*" && dow == "*" {
-		return fmt.Sprintf("twice (%s)", strings.ReplaceAll(hour, ",", ":00, ") + ":00")
-	}
-
-	// weekly
+	// weekly: dom=* month=* dow!=*
 	if dom == "*" && month == "*" && dow != "*" {
 		return fmt.Sprintf("weekly (%s)", dow)
 	}
 
+	// daily at time: 0 9 * * * → "daily 9:00"
+	if min != "*" && hour != "*" && dom == "*" && month == "*" && dow == "*" {
+		return fmt.Sprintf("daily %s:%s", hour, min)
+	}
+
+	// fallback: just the schedule trimmed
 	return schedule
 }

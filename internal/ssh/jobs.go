@@ -25,16 +25,17 @@ type Config struct {
 }
 
 type Job struct {
-	ID           string
-	Name         string
-	Schedule     string
-	Repeat       string
-	NextRun      string
-	NextRunHuman string // "in 2h 30m"
-	Deliver      string
-	DeliverTag   string
-	LastRun      string
-	LastState    string
+	ID             string
+	Name           string
+	Schedule       string
+	ScheduleHuman  string // "daily 9:00", "twice (11:00, 22:00)", etc.
+	Repeat         string
+	NextRun        string
+	NextRunHuman   string // "in 2h 30m"
+	Deliver        string
+	DeliverTag     string
+	LastRun        string
+	LastState      string
 }
 
 func FetchJobs(cfg Config) ([]Job, error) {
@@ -144,6 +145,7 @@ func parseJobBlock(block string) (Job, error) {
 			job.ID = strings.TrimSpace(strings.TrimPrefix(line, "ID:"))
 		} else if strings.HasPrefix(line, "SCHEDULE|") {
 			job.Schedule = strings.TrimSpace(strings.TrimPrefix(line, "SCHEDULE|"))
+			job.ScheduleHuman = cronToHuman(job.Schedule)
 		} else if strings.HasPrefix(line, "REPEAT|") {
 			job.Repeat = strings.TrimSpace(strings.TrimPrefix(line, "REPEAT|"))
 		} else if strings.HasPrefix(line, "NEXT|") {
@@ -176,11 +178,56 @@ func parseJobBlock(block string) (Job, error) {
 	return job, nil
 }
 
+// cronToHuman converts cron expr like "0 9 * * *" → "daily 9:00"
+func cronToHuman(schedule string) string {
+	fields := strings.Fields(schedule)
+	if len(fields) < 5 {
+		return schedule
+	}
+
+	min := fields[0]
+	hour := fields[1]
+	dom := fields[2]
+	month := fields[3]
+	dow := fields[4]
+
+	// every X hours: 0 */12 * * * → "every 12h"
+	if min == "0" && strings.HasPrefix(hour, "*/") {
+		return fmt.Sprintf("every %sh", strings.TrimPrefix(hour, "*/"))
+	}
+
+	// twice daily: 0 11,16 * * * → "twice (11:00, 16:00)"
+	if min == "0" && strings.Contains(hour, ",") {
+		var formatted []string
+		for _, p := range strings.Split(hour, ",") {
+			if len(p) == 1 {
+				p = "0" + p
+			}
+			formatted = append(formatted, fmt.Sprintf("%s:00", p))
+		}
+		return "twice (" + strings.Join(formatted, ", ") + ")"
+	}
+
+	// weekly: dom=* month=* dow!=*
+	if dom == "*" && month == "*" && dow != "*" && dow != "*" {
+		return fmt.Sprintf("weekly (%s)", dow)
+	}
+
+	// daily at time: 0 9 * * * → "daily 9:00"
+	if dom == "*" && month == "*" && dow == "*" {
+		if min != "0" {
+			return fmt.Sprintf("daily %s:%s", hour, min)
+		}
+		return fmt.Sprintf("daily %s:00", hour)
+	}
+
+	return schedule
+}
+
 // humanDuration converts an ISO timestamp to "in Xh Ym" or "in Nm"
 func humanDuration(ts string) string {
 	t, err := time.Parse("2006-01-02T15:04:05Z07:00", ts)
 	if err != nil {
-		// Try alternative layout
 		t, err = time.Parse(time.RFC3339, ts)
 		if err != nil {
 			return ts
@@ -217,11 +264,6 @@ func humanDuration(ts string) string {
 
 func deliverTag(d string) string {
 	if strings.HasPrefix(d, "discord:") {
-		id := strings.TrimPrefix(d, "discord:")
-		runes := []rune(id)
-		if len(runes) > 8 {
-			return "discord"
-		}
 		return "discord"
 	}
 	if d == "local" {
@@ -235,22 +277,22 @@ func deliverTag(d string) string {
 }
 
 func RenderSimple(jobs []Job) {
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color("#f97316")).Bold(true)
+	orange := lipgloss.NewStyle().Foreground(lipgloss.Color("#f97316")).Bold(true)
 	muted := lipgloss.NewStyle().Foreground(lipgloss.Color("#6b7280"))
-	cron := lipgloss.NewStyle().Foreground(lipgloss.Color("#fbbf24"))
-	next := lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee"))
-	ok := lipgloss.NewStyle().Foreground(lipgloss.Color("#10b981")).Bold(true)
-	err := lipgloss.NewStyle().Foreground(lipgloss.Color("#f87171")).Bold(true)
+	amber := lipgloss.NewStyle().Foreground(lipgloss.Color("#fbbf24"))
+	cyan := lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee"))
+	green := lipgloss.NewStyle().Foreground(lipgloss.Color("#10b981")).Bold(true)
+	red := lipgloss.NewStyle().Foreground(lipgloss.Color("#f87171")).Bold(true)
 
 	fmt.Println()
-	fmt.Println(style.Render("  SCHEDULED JOBS"))
-	fmt.Println(muted.Render("  " + strings.Repeat("─", 72)))
+	fmt.Println(orange.Render("  SCHEDULED JOBS"))
+	fmt.Println(muted.Render("  " + strings.Repeat("─", 65)))
 	for _, j := range jobs {
-		state := ok.Render("ok")
+		state := green.Render("ok")
 		if j.LastState == "error" {
-			state = err.Render("error")
+			state = red.Render("error")
 		}
-		fmt.Printf("  %-45s %s  %s\n", j.Name, cron.Render(j.Schedule), next.Render(j.NextRunHuman))
+		fmt.Printf("  %-45s %s  %s\n", j.Name, amber.Render(j.ScheduleHuman), cyan.Render(j.NextRunHuman))
 		fmt.Printf("  %s  %s\n\n", muted.Render("→ "+j.DeliverTag), state)
 	}
 }

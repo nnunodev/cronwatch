@@ -2,7 +2,7 @@ package view
 
 import (
 	"fmt"
-	"sort"; "strings"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbletea"
@@ -47,7 +47,7 @@ func (m *Model) fetchJobs() tea.Cmd {
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case ssh.JobsLoadedMsg:
-		m.jobs = sortJobs(msg.Jobs)
+		m.jobs = msg.Jobs
 		m.isLoading = false
 		m.lastError = ""
 		m.lastRefresh = time.Now().Format("15:04:05")
@@ -194,7 +194,7 @@ func jobRow(job ssh.Job, selected bool) string {
 	}
 
 	// Every column
-	every := cronToHuman(job.Schedule)
+	every := job.ScheduleHuman
 
 	// Name
 	nameStyle := white
@@ -258,75 +258,5 @@ func pad(s string, width int) string {
 	return s + strings.Repeat(" ", width-len(runes))
 }
 
-// cronToHuman converts cron expr like "0 9 * * *" → "daily 9:00"
-func cronToHuman(schedule string) string {
-	fields := strings.Fields(schedule)
-	if len(fields) < 5 {
-		return schedule
-	}
-
-	min := fields[0]
-	hour := fields[1]
-	dom := fields[2]
-	month := fields[3]
-	dow := fields[4]
-
-	// every X hours: 0 */12 * * * → "every 12h"
-	if min == "0" && strings.HasPrefix(hour, "*/") {
-		h := strings.TrimPrefix(hour, "*/")
-		return fmt.Sprintf("every %sh", h)
-	}
-
-	// twice daily: 0 11,16 * * * → "twice (11:00, 16:00)"
-	if min == "0" && strings.Contains(hour, ",") {
-		parts := strings.Split(hour, ",")
-		var formatted []string
-		for _, p := range parts {
-			if len(p) == 1 {
-				p = "0" + p
-			}
-			formatted = append(formatted, fmt.Sprintf("%s:00", p))
-		}
-		return "twice (" + strings.Join(formatted, ", ") + ")"
-	}
-
-	// weekly: dom=* month=* dow!=*
-	if dom == "*" && month == "*" && dow != "*" {
-		return fmt.Sprintf("weekly (%s)", dow)
-	}
-
-	// daily at time: 0 9 * * * → "daily 9:00"
-	if min != "*" && hour != "*" && dom == "*" && month == "*" && dow == "*" {
-		return fmt.Sprintf("daily %s:%s", hour, min)
-	}
-
-	// fallback: just the schedule trimmed
-	return schedule
-}
 
 
-// sortJobs sorts jobs by NextRun ascending (soonest first)
-func sortJobs(jobs []ssh.Job) []ssh.Job {
-	sorted := make([]ssh.Job, len(jobs))
-	copy(sorted, jobs)
-	sort.Slice(sorted, func(i, j int) bool {
-		ti, err := time.Parse(time.RFC3339, sorted[i].NextRun)
-		if err != nil {
-			ti2, err2 := time.Parse("2006-01-02T15:04:05Z07:00", sorted[i].NextRun)
-			if err2 != nil {
-				return false
-			}
-			ti = ti2
-		}
-		tj, err := time.Parse(time.RFC3339, sorted[j].NextRun)
-		if err != nil {
-			tj2, err2 := time.Parse("2006-01-02T15:04:05Z07:00", sorted[j].NextRun)
-			if err2 != nil {
-				return false
-			}
-			tj = tj2
-		}
-		return ti.Before(tj)
-	})
-	return sorted
-}

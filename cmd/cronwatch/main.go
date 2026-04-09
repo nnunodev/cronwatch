@@ -12,6 +12,8 @@ import (
 	"github.com/nnunodev/cronwatch/internal/view"
 )
 
+var version = "dev"
+
 func main() {
 	host := flag.String("host", "100.102.146.36", "Hyperion IP or hostname")
 	user := flag.String("user", "root", "SSH user")
@@ -19,13 +21,21 @@ func main() {
 	key := flag.String("key", "", "SSH private key path")
 	simple := flag.Bool("simple", false, "Simple terminal output")
 	refresh := flag.Int("refresh", 10, "Auto-refresh interval in seconds (0=disabled)")
+	timeout := flag.Int("timeout", 10, "SSH command timeout in seconds")
+	showVersion := flag.Bool("version", false, "Show version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("cronwatch %s\n", version)
+		return
+	}
 
 	cfg := ssh.Config{
 		Host:    *host,
 		User:    *user,
 		Port:    *port,
 		KeyPath: *key,
+		Timeout: *timeout,
 	}
 
 	if *simple {

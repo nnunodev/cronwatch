@@ -2,40 +2,48 @@ package ssh
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"log"
 	"os/exec"
-	"sort"; "strings"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
 )
 
-type LoadingMsg     struct{}
-type JobsLoadedMsg   struct{ Jobs []Job }
-type ErrorMsg       struct{ Error string }
+type LoadingMsg   struct{}
+type JobsLoadedMsg struct{ Jobs []Job }
+type ErrorMsg     struct{ Error string }
 
 type Config struct {
 	Host    string
 	User    string
 	Port    int
 	KeyPath string
+	Timeout int // SSH command timeout in seconds
 }
 
 type Job struct {
-	ID             string
-	Name           string
-	Schedule       string
-	ScheduleHuman  string
-	NextRun        string
-	NextRunHuman   string
-	Deliver        string
-	DeliverTag     string
-	LastRun        string
-	LastState      string
+	ID            string
+	Name          string
+	Schedule      string
+	ScheduleHuman string // "daily 9:00", "twice (11:00, 16:00)", etc.
+	NextRun       string
+	NextRunHuman  string // "in 2h 30m"
+	Deliver       string
+	DeliverTag    string
+	LastRun       string
+	LastState     string
 }
 
 func FetchJobs(cfg Config) ([]Job, error) {
-	cmd := exec.Command("ssh",
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.Timeout)*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx,
+		"ssh",
 		"-o", "StrictHostKeyChecking=no",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "BatchMode=yes",
@@ -51,12 +59,13 @@ func FetchJobs(cfg Config) ([]Job, error) {
 	)
 
 	var out bytes.Buffer
-	// Silencing SSH warnings — host-key warnings are expected on first connect
-	// and don't affect functionality. Real errors still cause cmd.Run to fail.
 	cmd.Stdout = &out
 	cmd.Stderr = bytes.NewBuffer(nil)
 
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, fmt.Errorf("ssh timeout after %ds", cfg.Timeout)
+		}
 		return nil, fmt.Errorf("ssh failed: %w", err)
 	}
 
@@ -71,6 +80,7 @@ func ParseJobs(raw string) ([]Job, error) {
 	for _, line := range lines {
 		stripped := strings.TrimSpace(line)
 
+		// Skip box-drawing characters
 		if strings.HasPrefix(line, "┌") || strings.HasPrefix(line, "└") ||
 			strings.HasPrefix(line, "│") {
 			continue
@@ -90,6 +100,7 @@ func ParseJobs(raw string) ([]Job, error) {
 			continue
 		}
 
+		// Job ID line starts with numeric ID and contains [active]
 		if len(stripped) >= 13 && strings.Contains(stripped, "[active]") {
 			if buf.Len() > 0 {
 				if job, err := parseJobBlock(buf.String()); err == nil && job.Name != "" {
@@ -130,7 +141,8 @@ func ParseJobs(raw string) ([]Job, error) {
 		}
 	}
 
-	jobs = sortJobsByNextRun(jobs); return jobs, nil
+	jobs = sortJobsByNextRun(jobs)
+	return jobs, nil
 }
 
 func parseJobBlock(block string) (Job, error) {
@@ -172,6 +184,7 @@ func parseJobBlock(block string) (Job, error) {
 	return job, nil
 }
 
+// cronToHuman converts cron expr to human-readable string
 func cronToHuman(schedule string) string {
 	fields := strings.Fields(schedule)
 	if len(fields) < 5 {
@@ -184,10 +197,12 @@ func cronToHuman(schedule string) string {
 	month := fields[3]
 	dow := fields[4]
 
+	// every X hours: 0 */12 * * * → "every 12h"
 	if min == "0" && strings.HasPrefix(hour, "*/") {
 		return fmt.Sprintf("every %sh", strings.TrimPrefix(hour, "*/"))
 	}
 
+	// twice daily: 0 11,16 * * * → "twice (11:00, 16:00)"
 	if min == "0" && strings.Contains(hour, ",") {
 		var formatted []string
 		for _, p := range strings.Split(hour, ",") {
@@ -199,10 +214,12 @@ func cronToHuman(schedule string) string {
 		return "twice (" + strings.Join(formatted, ", ") + ")"
 	}
 
+	// weekly: dom=* month=* dow=something
 	if dom == "*" && month == "*" && dow != "*" {
 		return fmt.Sprintf("weekly (%s)", dow)
 	}
 
+	// daily at time: 0 9 * * * → "daily 9:00"
 	if dom == "*" && month == "*" && dow == "*" {
 		if min == "0" {
 			return fmt.Sprintf("daily %s:00", hour)
@@ -213,6 +230,7 @@ func cronToHuman(schedule string) string {
 	return schedule
 }
 
+// humanDuration converts ISO timestamp to "in Xh Ym" or "in Nm"
 func humanDuration(ts string) string {
 	t, err := time.Parse("2006-01-02T15:04:05Z07:00", ts)
 	if err != nil {
@@ -285,6 +303,7 @@ func RenderSimple(jobs []Job) {
 	}
 }
 
+// sortJobsByNextRun sorts jobs by NextRun ascending (soonest first)
 func sortJobsByNextRun(jobs []Job) []Job {
 	sorted := make([]Job, len(jobs))
 	copy(sorted, jobs)
@@ -293,6 +312,7 @@ func sortJobsByNextRun(jobs []Job) []Job {
 		if err != nil {
 			ti2, err2 := time.Parse("2006-01-02T15:04:05Z07:00", sorted[i].NextRun)
 			if err2 != nil {
+				log.Printf("sort: could not parse NextRun %q for job %q: %v", sorted[i].NextRun, sorted[i].Name, err2)
 				return false
 			}
 			ti = ti2
@@ -301,6 +321,7 @@ func sortJobsByNextRun(jobs []Job) []Job {
 		if err != nil {
 			tj2, err2 := time.Parse("2006-01-02T15:04:05Z07:00", sorted[j].NextRun)
 			if err2 != nil {
+				log.Printf("sort: could not parse NextRun %q for job %q: %v", sorted[j].NextRun, sorted[j].Name, err2)
 				return false
 			}
 			tj = tj2

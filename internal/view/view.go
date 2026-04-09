@@ -97,25 +97,23 @@ func (m *Model) autoRefresh() tea.Cmd {
 	})
 }
 
+// Styles — no borders, just clean colored text
 var (
-	bgStyle            = lipgloss.NewStyle().Background(lipgloss.Color("#0b1020"))
-	titleStyle         = lipgloss.NewStyle().Background(lipgloss.Color("#0b1020")).Foreground(lipgloss.Color("#f97316")).Bold(true)
-	cardStyle          = lipgloss.NewStyle().Background(lipgloss.Color("#0f1923")).Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#1f3b5b")).Padding(0, 1)
-	cardSelectedStyle  = lipgloss.NewStyle().Background(lipgloss.Color("#172033")).Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#22d3ee")).Padding(0, 1)
-	jobNameStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#f8fafc")).Bold(true)
-	jobNameMutedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#9ca3af"))
-	statusActiveStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#10b981")).Bold(true)
-	statusErrorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#f87171")).Bold(true)
-	cronStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("#fbbf24"))
-	nextRunStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee"))
-	footerStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("#6b7280"))
-	labelStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("#6b7280"))
-	loadingStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee")).Bold(true)
-	errorStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("#f87171"))
-	headerAccentStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee"))
-	dotActiveStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#10b981"))
-	dotErrorStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#f87171"))
-	greenStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("#10b981"))
+	bg              = lipgloss.NewStyle().Background(lipgloss.Color("#0b1020"))
+	dim             = lipgloss.NewStyle().Foreground(lipgloss.Color("#374151"))
+	dimText         = lipgloss.NewStyle().Foreground(lipgloss.Color("#6b7280"))
+	mutedText       = lipgloss.NewStyle().Foreground(lipgloss.Color("#9ca3af"))
+	white           = lipgloss.NewStyle().Foreground(lipgloss.Color("#f3f4f6"))
+	whiteBold       = lipgloss.NewStyle().Foreground(lipgloss.Color("#f9fafb")).Bold(true)
+	orange          = lipgloss.NewStyle().Foreground(lipgloss.Color("#f97316")).Bold(true)
+	cyan            = lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee"))
+	amber           = lipgloss.NewStyle().Foreground(lipgloss.Color("#fbbf24"))
+	green           = lipgloss.NewStyle().Foreground(lipgloss.Color("#10b981"))
+	greenBold       = lipgloss.NewStyle().Foreground(lipgloss.Color("#10b981")).Bold(true)
+	red             = lipgloss.NewStyle().Foreground(lipgloss.Color("#f87171")).Bold(true)
+	accent          = lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee"))
+	selectedBg      = lipgloss.NewStyle().Background(lipgloss.Color("#172033"))
+	divider         = lipgloss.NewStyle().Foreground(lipgloss.Color("#1f3b5b"))
 )
 
 func (m *Model) View() string {
@@ -131,105 +129,108 @@ func (m *Model) View() string {
 func (m *Model) jobsView() string {
 	var b strings.Builder
 
-	b.WriteString(bgStyle.Render("\n"))
-	b.WriteString(titleStyle.Render("  SCHEDULED JOBS  ") + "  ")
-	b.WriteString(headerAccentStyle.Render("when") + footerStyle.Render(" — hyperion scheduler"))
-	b.WriteString(bgStyle.Render("\n\n"))
+	// ── Header ──────────────────────────────────────────
+	b.WriteString(bg.Render(" "))
+	b.WriteString(orange.Render("SCHEDULED JOBS"))
+	b.WriteString(dimText.Render("  ·  hyperion cronwatch"))
+	b.WriteString(bg.Render("\n"))
 
-	b.WriteString(labelStyle.Render("  "))
-	b.WriteString(truncate("NAME", 42))
-	b.WriteString(labelStyle.Render("  "))
-	b.WriteString(truncate("SCHEDULE", 14))
-	b.WriteString(labelStyle.Render("  "))
-	b.WriteString(truncate("NEXT RUN", 22))
-	b.WriteString(labelStyle.Render("  "))
-	b.WriteString(truncate("STATUS", 9))
-	b.WriteString(labelStyle.Render("  "))
-	b.WriteString(truncate("DELIVER", 18))
-	b.WriteString(bgStyle.Render("\n"))
+	// Column headers
+	b.WriteString(bg.Render(" "))
+	b.WriteString(whiteBold.Render(padRight("NAME", 44)))
+	b.WriteString(whiteBold.Render(padRight("SCHEDULE", 14)))
+	b.WriteString(whiteBold.Render(padRight("NEXT RUN", 26)))
+	b.WriteString(whiteBold.Render(padRight("STATUS", 8)))
+	b.WriteString(whiteBold.Render("DELIVER"))
+	b.WriteString(bg.Render("\n"))
 
-	b.WriteString(labelStyle.Render("  ") +
-		strings.Repeat("─", 42) + "  " +
-		strings.Repeat("─", 14) + "  " +
-		strings.Repeat("─", 22) + "  " +
-		strings.Repeat("─", 9) + "  " +
-		strings.Repeat("─", 18))
-	b.WriteString(bgStyle.Render("\n"))
+	b.WriteString(bg.Render(" "))
+	b.WriteString(dim.Render(strings.Repeat("─", 44) + "  " + strings.Repeat("─", 14) + "  " + strings.Repeat("─", 26) + "  " + strings.Repeat("─", 8) + "  " + strings.Repeat("─", 24)))
+	b.WriteString(bg.Render("\n"))
 
+	// ── Job rows ───────────────────────────────────────
 	for i, job := range m.jobs {
-		style := cardStyle
+		prefix := " "
+		nameStyle := white
 		if i == m.selectedIndex {
-			style = cardSelectedStyle
+			prefix = ">"
+			nameStyle = accent
 		}
 
-		dot := dotActiveStyle.Render("●")
-		status := statusActiveStyle.Render("ACTIVE")
+		dot := green.Render("●")
+		status := greenBold.Render("ACTIVE")
 		if job.LastState == "error" {
-			dot = dotErrorStyle.Render("●")
-			status = statusErrorStyle.Render("ERROR")
+			dot = red.Render("●")
+			status = red.Render("ERROR")
+			if i != m.selectedIndex {
+				nameStyle = dimText
+			}
 		}
 
-		name := jobNameStyle.Render(truncate(job.Name, 42))
-		if job.LastState == "error" {
-			name = jobNameMutedStyle.Render(truncate(job.Name, 42))
-		}
+		name := nameStyle.Render(padRight(trunc(job.Name, 43), 44))
+		sched := amber.Render(padRight(job.Schedule, 14))
+		next := cyan.Render(padRight(trunc(job.NextRun, 25), 26))
+		deliver := mutedText.Render(trunc(formatDeliver(job.Deliver), 24))
 
-		b.WriteString(style.Render("  "))
+		b.WriteString(bg.Render(prefix))
 		b.WriteString(name)
-		b.WriteString(style.Render("  "))
-		b.WriteString(cronStyle.Render(truncate(job.Schedule, 14)))
-		b.WriteString(style.Render("  "))
-		b.WriteString(nextRunStyle.Render(truncate(job.NextRun, 22)))
-		b.WriteString(style.Render("  "))
-		b.WriteString(dot + status)
-		b.WriteString(style.Render("  "))
-		b.WriteString(footerStyle.Render(truncate(formatDeliver(job.Deliver), 18)))
-		b.WriteString(bgStyle.Render("\n"))
+		b.WriteString(sched)
+		b.WriteString(next)
+		b.WriteString(dot)
+		b.WriteString(status)
+		b.WriteString("  ")
+		b.WriteString(deliver)
+		b.WriteString(bg.Render("\n"))
 
-		meta := fmt.Sprintf("    last: %s  %s", job.LastRun, job.LastState)
-		b.WriteString(labelStyle.Render(meta) + bgStyle.Render("\n"))
+		// last run meta on next line, indented
+		lastState := dimText.Render(job.LastState)
+		if job.LastState == "error" {
+			lastState = red.Render(job.LastState)
+		}
+		b.WriteString(bg.Render(" "))
+		b.WriteString(dimText.Render("  last:  " + job.LastRun))
+		b.WriteString("  ")
+		b.WriteString(lastState)
+		b.WriteString(bg.Render("\n"))
 	}
 
-	b.WriteString(bgStyle.Render("\n"))
-
-	refreshHint := "r refresh  q quit"
-	if m.refreshSec > 0 {
-		refreshHint = fmt.Sprintf("auto-refresh %ds  r refresh  q quit", m.refreshSec)
-	}
-	b.WriteString(footerStyle.Render("  ") + greenStyle.Render("● "+m.lastRefresh))
-	b.WriteString(footerStyle.Render("  ·  "))
-	b.WriteString(footerStyle.Render(fmt.Sprintf("%d jobs", len(m.jobs))))
-	b.WriteString(footerStyle.Render("  ·  " + refreshHint))
-	b.WriteString(bgStyle.Render("\n"))
+	// ── Footer ────────────────────────────────────────
+	b.WriteString(bg.Render(" "))
+	b.WriteString(green.Render("● "+m.lastRefresh))
+	b.WriteString(dimText.Render("  ·  "))
+	b.WriteString(dimText.Render(fmt.Sprintf("%d jobs", len(m.jobs))))
+	b.WriteString(dimText.Render("  ·  "))
+	b.WriteString(dimText.Render("↑↓ navigate  r refresh  q quit"))
+	b.WriteString(bg.Render("\n"))
 
 	return b.String()
 }
 
 func (m *Model) loadingView() string {
 	frames := []rune{'-', '\\', '|', '/'}
-	var b strings.Builder
-	b.WriteString(bgStyle.Render("\n\n"))
-	b.WriteString(loadingStyle.Render(fmt.Sprintf("  Loading from Hyperion %c", frames[m.refreshFrame%4])))
-	b.WriteString(bgStyle.Render("\n\n"))
-	return b.String()
+	b := bg.Render("\n\n  ") + cyan.Render(fmt.Sprintf("Loading from Hyperion %c", frames[m.refreshFrame%4])) + bg.Render("\n\n")
+	return b
 }
 
 func (m *Model) errorView() string {
-	var b strings.Builder
-	b.WriteString(bgStyle.Render("\n"))
-	b.WriteString(errorStyle.Render("  ✗ "+m.lastError))
-	b.WriteString(bgStyle.Render("\n\n"))
-	b.WriteString(footerStyle.Render("  Press r to retry  ·  q to quit"))
-	b.WriteString(bgStyle.Render("\n"))
-	return b.String()
+	b := bg.Render("\n  ") + red.Render("✗ "+m.lastError) + bg.Render("\n\n  ") + dimText.Render("r — retry  ·  q — quit\n\n")
+	return b
 }
 
-func truncate(s string, max int) string {
+func trunc(s string, max int) string {
 	runes := []rune(s)
 	if len(runes) > max {
 		return string(runes[:max-1]) + "…"
 	}
 	return s
+}
+
+func padRight(s string, width int) string {
+	runes := []rune(s)
+	if len(runes) >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-len(runes))
 }
 
 var deliverDiscordRx = regexp.MustCompile(`discord:(\d+)`)
@@ -238,8 +239,8 @@ func formatDeliver(d string) string {
 	m := deliverDiscordRx.FindStringSubmatch(d)
 	if len(m) == 2 {
 		runes := []rune(m[1])
-		if len(runes) > 8 {
-			return "discord:" + string(runes[:8]) + "…"
+		if len(runes) > 10 {
+			return "discord:" + string(runes[:10]) + "…"
 		}
 		return "discord:" + m[1]
 	}

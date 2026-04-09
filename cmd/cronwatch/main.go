@@ -18,7 +18,7 @@ func main() {
 	port := flag.Int("port", 22, "SSH port")
 	key := flag.String("key", "", "SSH private key path")
 	simple := flag.Bool("simple", false, "Simple terminal output")
-	refresh := flag.Int("refresh", 0, "Auto-refresh interval in seconds (0=disabled)")
+	refresh := flag.Int("refresh", 10, "Auto-refresh interval in seconds (0=disabled)")
 	flag.Parse()
 
 	cfg := ssh.Config{

@@ -151,14 +151,14 @@ func (m *Model) jobsView() string {
 	b.WriteString(dimText.Render("  "))
 	b.WriteString(whiteBold.Render("NEXT"))
 	b.WriteString(dimText.Render("   "))
-	b.WriteString(whiteBold.Render("EVERY"))
+	b.WriteString(whiteBold.Render(center("EVERY", 13)))
 	b.WriteString(dimText.Render("  "))
-	b.WriteString(whiteBold.Render("STATUS"))
+	b.WriteString(whiteBold.Render(center("STATUS", 7)))
 	b.WriteString(bg.Render("\n"))
 
 	// Divider
 	b.WriteString(bg.Render(" "))
-	b.WriteString(dimText.Render("  " + strings.Repeat("─", 38) + "  " + strings.Repeat("─", 9) + "  " + strings.Repeat("─", 13) + "  " + strings.Repeat("─", 7)))
+	b.WriteString(dimText.Render("  " + strings.Repeat("─", 38) + "  " + strings.Repeat("─", 9) + "  " + center(strings.Repeat("─", 13), 13) + "  " + center(strings.Repeat("─", 7), 7)))
 	b.WriteString(bg.Render("\n"))
 
 	// Jobs
@@ -236,6 +236,18 @@ func trunc(s string, max int) string {
 		return string(runes[:max-1]) + "…"
 	}
 	return s
+}
+
+func center(s string, width int) string {
+	runes := []rune(s)
+	slen := len(runes)
+	if slen >= width {
+		return s
+	}
+	pad := width - slen
+	left := pad / 2
+	right := pad - left
+	return strings.Repeat(" ", left) + s + strings.Repeat(" ", right)
 }
 
 func pad(s string, width int) string {

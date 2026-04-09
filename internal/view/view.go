@@ -150,14 +150,14 @@ func (m *Model) jobsView() string {
 	b.WriteString(dimText.Render("   "))
 	b.WriteString(whiteBold.Render(center("EVERY", 15)))
 	b.WriteString(dimText.Render("  "))
-	b.WriteString(whiteBold.Render(center("STATUS", 6)))
+	b.WriteString(whiteBold.Render(center("STATUS", 7)))
 	b.WriteString(dimText.Render("  "))
-	b.WriteString(whiteBold.Render(center("TRIGGERED", 10)))
+	b.WriteString(whiteBold.Render(center("TRIGGERED", 12)))
 	b.WriteString(bg.Render("\n"))
 
 	// Divider
 	b.WriteString(bg.Render(" "))
-	b.WriteString(dimText.Render("  " + strings.Repeat("─", 36) + "  " + strings.Repeat("─", 9) + "  " + strings.Repeat("─", 15) + "  " + strings.Repeat("─", 6) + "  " + strings.Repeat("─", 10)))
+	b.WriteString(dimText.Render("  " + strings.Repeat("─", 36) + "  " + strings.Repeat("─", 9) + "  " + strings.Repeat("─", 15) + "  " + strings.Repeat("─", 7) + "  " + strings.Repeat("─", 12)))
 	b.WriteString(bg.Render("\n"))
 
 	// Jobs
@@ -192,7 +192,7 @@ func jobRow(job ssh.Job, selected bool) string {
 	}
 
 	// Pad status to fixed width so dots align regardless of text length
-	padStatus := dot + statusText + strings.Repeat(" ", max(0, 6-len([]rune(dot+statusText))))
+	padStatus := dot + statusText + strings.Repeat(" ", max(0, 7-len([]rune(dot+statusText))))
 
 	// Next run column
 	var nextDisplay string
@@ -214,9 +214,9 @@ func jobRow(job ssh.Job, selected bool) string {
 	}
 
 	// Triggered column
-	triggered := dimText.Render(center(job.LastRunAtH, 10))
+	triggered := dimText.Render(center(job.LastRunAtH, 12))
 	if selected {
-		triggered = accent.Render(center(job.LastRunAtH, 10))
+		triggered = accent.Render(center(job.LastRunAtH, 12))
 	}
 
 	return bg.Render(prefix) +

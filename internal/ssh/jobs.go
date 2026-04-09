@@ -250,20 +250,20 @@ func humanDuration(ts string) string {
 		d := h / 24
 		h = h % 24
 		if h > 0 {
-			return fmt.Sprintf("in %dd %dh", d, h)
+			return fmt.Sprintf("%dd %dh", d, h)
 		}
-		return fmt.Sprintf("in %dd", d)
+		return fmt.Sprintf("%dd", d)
 	}
 	if h > 0 {
 		if m > 0 {
-			return fmt.Sprintf("in %dh %dm", h, m)
+			return fmt.Sprintf("%dh %dm", h, m)
 		}
-		return fmt.Sprintf("in %dh", h)
+		return fmt.Sprintf("%dh", h)
 	}
 	if m > 0 {
-		return fmt.Sprintf("in %dm", m)
+		return fmt.Sprintf("%dm", m)
 	}
-	return "in <1m"
+	return "<1m"
 }
 
 // lastRunHuman returns just the clock time

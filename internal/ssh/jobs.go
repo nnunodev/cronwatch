@@ -266,8 +266,7 @@ func humanDuration(ts string) string {
 	return "in <1m"
 }
 
-// lastRunHuman returns a compact relative + clock representation
-// e.g. "today 03:01" or "yesterday 14:05" or just the time if more than 2 days ago
+// lastRunHuman returns just the clock time
 func lastRunHuman(ts string) string {
 	t, err := time.Parse("2006-01-02T15:04:05Z07:00", ts)
 	if err != nil {
@@ -276,21 +275,7 @@ func lastRunHuman(ts string) string {
 			return ts
 		}
 	}
-
-	now := time.Now()
-	diff := now.Sub(t)
-
-	clock := t.In(now.Location()).Format("15:04")
-	if diff < 24*time.Hour {
-		return "today " + clock
-	}
-	if diff < 48*time.Hour {
-		return "yesterday " + clock
-	}
-	if diff < 7*24*time.Hour {
-		return fmt.Sprintf("%dd ago %s", int(diff.Hours()/24), clock)
-	}
-	return clock
+	return t.In(time.Now().Location()).Format("15:04")
 }
 
 func deliverTag(d string) string {
@@ -332,7 +317,7 @@ func RenderSimple(jobs []Job) {
 			statePrefix = "● "
 		}
 
-		triggered := muted.Render("triggered " + j.LastRunAtH)
+		triggered := muted.Render(j.LastRunAtH)
 
 		fmt.Printf("  %-48s %s  %s\n", j.Name, amber.Render(j.Schedule), cyan.Render(j.NextRun))
 		fmt.Printf("  %s %s\n\n", statePrefix+state, triggered)

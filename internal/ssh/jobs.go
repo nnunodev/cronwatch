@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
-	"strings"
+	"sort"; "strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -137,7 +137,7 @@ func ParseJobs(raw string) ([]Job, error) {
 		}
 	}
 
-	return jobs, nil
+	jobs = sortJobsByNextRun(jobs); return jobs, nil
 }
 
 func parseJobBlock(block string) (Job, error) {
@@ -292,4 +292,29 @@ func RenderSimple(jobs []Job) {
 		fmt.Printf("  %-45s %s  %s\n", j.Name, amber.Render(j.ScheduleHuman), cyan.Render(j.NextRunHuman))
 		fmt.Printf("  %s  %s\n\n", muted.Render("→ "+j.DeliverTag), state)
 	}
+}
+
+func sortJobsByNextRun(jobs []Job) []Job {
+	sorted := make([]Job, len(jobs))
+	copy(sorted, jobs)
+	sort.Slice(sorted, func(i, j int) bool {
+		ti, err := time.Parse(time.RFC3339, sorted[i].NextRun)
+		if err != nil {
+			ti2, err2 := time.Parse("2006-01-02T15:04:05Z07:00", sorted[i].NextRun)
+			if err2 != nil {
+				return false
+			}
+			ti = ti2
+		}
+		tj, err := time.Parse(time.RFC3339, sorted[j].NextRun)
+		if err != nil {
+			tj2, err2 := time.Parse("2006-01-02T15:04:05Z07:00", sorted[j].NextRun)
+			if err2 != nil {
+				return false
+			}
+			tj = tj2
+		}
+		return ti.Before(tj)
+	})
+	return sorted
 }

@@ -2,7 +2,7 @@ package view
 
 import (
 	"fmt"
-	"strings"
+	"sort"; "strings"
 	"time"
 
 	"github.com/charmbracelet/bubbletea"
@@ -47,7 +47,7 @@ func (m *Model) fetchJobs() tea.Cmd {
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case ssh.JobsLoadedMsg:
-		m.jobs = msg.Jobs
+		m.jobs = sortJobs(msg.Jobs)
 		m.isLoading = false
 		m.lastError = ""
 		m.lastRefresh = time.Now().Format("15:04:05")
@@ -290,4 +290,31 @@ func cronToHuman(schedule string) string {
 
 	// fallback: just the schedule trimmed
 	return schedule
+}
+
+
+// sortJobs sorts jobs by NextRun ascending (soonest first)
+func sortJobs(jobs []ssh.Job) []ssh.Job {
+	sorted := make([]ssh.Job, len(jobs))
+	copy(sorted, jobs)
+	sort.Slice(sorted, func(i, j int) bool {
+		ti, err := time.Parse(time.RFC3339, sorted[i].NextRun)
+		if err != nil {
+			ti2, err2 := time.Parse("2006-01-02T15:04:05Z07:00", sorted[i].NextRun)
+			if err2 != nil {
+				return false
+			}
+			ti = ti2
+		}
+		tj, err := time.Parse(time.RFC3339, sorted[j].NextRun)
+		if err != nil {
+			tj2, err2 := time.Parse("2006-01-02T15:04:05Z07:00", sorted[j].NextRun)
+			if err2 != nil {
+				return false
+			}
+			tj = tj2
+		}
+		return ti.Before(tj)
+	})
+	return sorted
 }

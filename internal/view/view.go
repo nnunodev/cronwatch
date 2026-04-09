@@ -150,14 +150,14 @@ func (m *Model) jobsView() string {
 	b.WriteString(dimText.Render("   "))
 	b.WriteString(whiteBold.Render(center("EVERY", 15)))
 	b.WriteString(dimText.Render("  "))
-	b.WriteString(whiteBold.Render(center("STATUS", 7)))
+	b.WriteString(whiteBold.Render(center("STATUS", 6)))
 	b.WriteString(dimText.Render("  "))
-	b.WriteString(whiteBold.Render(center("TRIGGERED", 14)))
+	b.WriteString(whiteBold.Render(center("TRIGGERED", 10)))
 	b.WriteString(bg.Render("\n"))
 
 	// Divider
 	b.WriteString(bg.Render(" "))
-	b.WriteString(dimText.Render("  " + strings.Repeat("─", 36) + "  " + strings.Repeat("─", 9) + "  " + strings.Repeat("─", 15) + "  " + strings.Repeat("─", 7) + "  " + strings.Repeat("─", 14)))
+	b.WriteString(dimText.Render("  " + strings.Repeat("─", 36) + "  " + strings.Repeat("─", 9) + "  " + strings.Repeat("─", 15) + "  " + strings.Repeat("─", 6) + "  " + strings.Repeat("─", 10)))
 	b.WriteString(bg.Render("\n"))
 
 	// Jobs
@@ -211,9 +211,9 @@ func jobRow(job ssh.Job, selected bool) string {
 	}
 
 	// Triggered column
-	triggered := dimText.Render(center(job.LastRunAtH, 14))
+	triggered := dimText.Render(center(job.LastRunAtH, 10))
 	if selected {
-		triggered = accent.Render(center(job.LastRunAtH, 14))
+		triggered = accent.Render(center(job.LastRunAtH, 10))
 	}
 
 	return bg.Render(prefix) +

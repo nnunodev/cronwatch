@@ -209,8 +209,8 @@ func cronToHuman(schedule string) string {
 	}
 
 	// weekly: dom=* month=* dow!=*
-	if dom == "*" && month == "*" && dow != "*" && dow != "*" {
-		return fmt.Sprintf("weekly (%s)", dow)
+	if dom == "*" && month == "*" && dow != "*" {
+		return fmt.Sprintf("weekly (Sun)", dow)
 	}
 
 	// daily at time: 0 9 * * * → "daily 9:00"

@@ -240,7 +240,7 @@ func humanDuration(ts string) string {
 	}
 	diff := time.Until(t)
 	if diff < 0 {
-		return "now"
+		return "executing"
 	}
 
 	h := int(diff.Hours())

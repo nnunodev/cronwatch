@@ -211,9 +211,9 @@ func jobRow(job ssh.Job, selected bool) string {
 	}
 
 	// Triggered column
-	triggered := dimText.Render(job.LastRunAtH)
+	triggered := dimText.Render(center(job.LastRunAtH, 14))
 	if selected {
-		triggered = accent.Render(job.LastRunAtH)
+		triggered = accent.Render(center(job.LastRunAtH, 14))
 	}
 
 	return bg.Render(prefix) +

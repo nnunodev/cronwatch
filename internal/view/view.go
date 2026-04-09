@@ -118,21 +118,6 @@ var (
 	red           = lipgloss.NewStyle().Foreground(lipgloss.Color("#f87171")).Bold(true)
 	blue          = lipgloss.NewStyle().Foreground(lipgloss.Color("#60a5fa")).Bold(true)
 	accent        = lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee"))
-	tagStyle      = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#d1d5db")).
-			Background(lipgloss.Color("#1f2937")).
-			Padding(0, 1).
-			MarginLeft(1)
-	tagErrorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#fecaca")).
-			Background(lipgloss.Color("#7f1d1d")).
-			Padding(0, 1).
-			MarginLeft(1)
-	tagRunningStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#bfdbfe")).
-			Background(lipgloss.Color("#1e3a5f")).
-			Padding(0, 1).
-			MarginLeft(1)
 )
 
 // ─── View ─────────────────────────────────────────────────────────────────
@@ -166,13 +151,11 @@ func (m *Model) jobsView() string {
 	b.WriteString(whiteBold.Render(center("EVERY", 13)))
 	b.WriteString(dimText.Render("  "))
 	b.WriteString(whiteBold.Render(center("STATUS", 7)))
-	b.WriteString(dimText.Render("  "))
-	b.WriteString(whiteBold.Render("TRIGGERED"))
-	b.WriteString(bg.Render("\n"))
+		b.WriteString(bg.Render("\n"))
 
 	// Divider
 	b.WriteString(bg.Render(" "))
-	b.WriteString(dimText.Render("  " + strings.Repeat("─", 36) + "  " + strings.Repeat("─", 9) + "  " + strings.Repeat("─", 13) + "  " + strings.Repeat("─", 7) + "  " + strings.Repeat("─", 24)))
+	b.WriteString(dimText.Render("  " + strings.Repeat("─", 36) + "  " + strings.Repeat("─", 9) + "  " + strings.Repeat("─", 13) + "  " + strings.Repeat("─", 7)))
 	b.WriteString(bg.Render("\n"))
 
 	// Jobs
@@ -194,19 +177,16 @@ func (m *Model) jobsView() string {
 
 func jobRow(job ssh.Job, selected bool) string {
 	// State + status
-	var dot, statusText, tag string
+	var dot, statusText string
 	if job.State == "running" {
 		dot = blue.Render("●")
 		statusText = blue.Render("running")
-		tag = tagRunningStyle.Render("RUNNING")
 	} else if job.LastState == "error" {
 		dot = red.Render("●")
 		statusText = red.Render("error")
-		tag = tagErrorStyle.Render("✗")
 	} else {
 		dot = greenBold.Render("●")
 		statusText = greenBold.Render("ok")
-		tag = tagStyle.Render(job.DeliverTag)
 	}
 
 	// Next run column
@@ -243,7 +223,6 @@ func jobRow(job ssh.Job, selected bool) string {
 		bg.Render("  ") +
 		dot +
 		statusText +
-		tag +
 		bg.Render("  ") +
 		triggered
 }

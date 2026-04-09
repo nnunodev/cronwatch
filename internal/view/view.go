@@ -190,9 +190,13 @@ func jobRow(job ssh.Job, selected bool) string {
 		dot = greenBold.Render("●")
 		statusText = greenBold.Render("ok")
 	}
-
-	// Pad status to fixed width so dots align regardless of text length
-	padStatus := dot + statusText + strings.Repeat(" ", max(0, 12-len([]rune(dot+statusText))))
+	// Status column: center dot+text in 12-char field
+	combinedStatus := dot + statusText
+	statusWidth := lipgloss.Width(combinedStatus)
+	remaining := 12 - statusWidth
+	leftPad := remaining / 2
+	rightPad := remaining - leftPad
+	padStatus := strings.Repeat(" ", leftPad) + combinedStatus + strings.Repeat(" ", rightPad)
 
 	// Next run column
 	var nextDisplay string
@@ -214,9 +218,12 @@ func jobRow(job ssh.Job, selected bool) string {
 	}
 
 	// Triggered column
-	triggered := dimText.Render(center(job.LastRunAtH, 12))
+	var triggered string
+	triggeredRaw := center(job.LastRunAtH, 12)
 	if selected {
-		triggered = accent.Render(center(job.LastRunAtH, 12))
+		triggered = accent.Render(triggeredRaw)
+	} else {
+		triggered = dimText.Render(triggeredRaw)
 	}
 
 	return bg.Render(prefix) +

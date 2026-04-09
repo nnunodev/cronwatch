@@ -13,14 +13,12 @@ import (
 type LoadingMsg     struct{}
 type JobsLoadedMsg   struct{ Jobs []Job }
 type ErrorMsg       struct{ Error string }
-type RefreshTickMsg struct{ Frame int }
 
 type Config struct {
 	Host    string
 	User    string
 	Port    int
 	KeyPath string
-	Refresh int
 }
 
 type Job struct {
@@ -28,7 +26,6 @@ type Job struct {
 	Name           string
 	Schedule       string
 	ScheduleHuman  string
-	Repeat         string
 	NextRun        string
 	NextRunHuman   string
 	Deliver        string
@@ -113,10 +110,6 @@ func ParseJobs(raw string) ([]Job, error) {
 			buf.WriteString("SCHEDULE|" + strings.TrimPrefix(stripped, "Schedule:") + "\n")
 			continue
 		}
-		if strings.HasPrefix(stripped, "Repeat:") {
-			buf.WriteString("REPEAT|" + strings.TrimPrefix(stripped, "Repeat:") + "\n")
-			continue
-		}
 		if strings.HasPrefix(stripped, "Next run:") {
 			buf.WriteString("NEXT|" + strings.TrimPrefix(stripped, "Next run:") + "\n")
 			continue
@@ -149,8 +142,6 @@ func parseJobBlock(block string) (Job, error) {
 		} else if strings.HasPrefix(line, "SCHEDULE|") {
 			job.Schedule = strings.TrimSpace(strings.TrimPrefix(line, "SCHEDULE|"))
 			job.ScheduleHuman = cronToHuman(job.Schedule)
-		} else if strings.HasPrefix(line, "REPEAT|") {
-			job.Repeat = strings.TrimSpace(strings.TrimPrefix(line, "REPEAT|"))
 		} else if strings.HasPrefix(line, "NEXT|") {
 			nextRaw := strings.TrimSpace(strings.TrimPrefix(line, "NEXT|"))
 			job.NextRun = nextRaw

@@ -20,6 +20,8 @@ type Model struct {
 	refreshSec    int
 	refreshFrame  int
 }
+type RefreshTickMsg struct{}
+
 
 func NewModel(cfg ssh.Config, refreshSec int) *Model {
 	return &Model{
@@ -61,7 +63,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.isLoading = false
 		return m, nil
 
-	case ssh.RefreshTickMsg:
+	case RefreshTickMsg:
 		m.refreshFrame++
 		if !m.isLoading && m.refreshSec > 0 {
 			m.isLoading = true
@@ -92,7 +94,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) autoRefresh() tea.Cmd {
 	return tea.Tick(time.Duration(m.refreshSec)*time.Second, func(t time.Time) tea.Msg {
-		return ssh.RefreshTickMsg{}
+		return RefreshTickMsg{}
 	})
 }
 

@@ -150,14 +150,14 @@ func (m *Model) jobsView() string {
 	b.WriteString(dimText.Render("   "))
 	b.WriteString(whiteBold.Render(center("EVERY", 15)))
 	b.WriteString(dimText.Render("  "))
-	b.WriteString(whiteBold.Render(center("STATUS", 12)))
+	b.WriteString(whiteBold.Render(center("STATUS", 14)))
 	b.WriteString(dimText.Render("  "))
 	b.WriteString(whiteBold.Render(center("TRIGGERED", 14)))
 	b.WriteString(bg.Render("\n"))
 
 	// Divider
 	b.WriteString(bg.Render(" "))
-	b.WriteString(dimText.Render("  " + strings.Repeat("─", 36) + "  " + strings.Repeat("─", 10) + "  " + strings.Repeat("─", 15) + "  " + strings.Repeat("─", 12) + "  " + strings.Repeat("─", 14)))
+	b.WriteString(dimText.Render("  " + strings.Repeat("─", 36) + "  " + strings.Repeat("─", 10) + "  " + strings.Repeat("─", 15) + "  " + strings.Repeat("─", 14) + "  " + strings.Repeat("─", 14)))
 	b.WriteString(bg.Render("\n"))
 
 	// Jobs
@@ -193,7 +193,7 @@ func jobRow(job ssh.Job, selected bool) string {
 	// Status column: center dot+text in 12-char field
 	combinedStatus := dot + statusText
 	statusWidth := lipgloss.Width(combinedStatus)
-	remaining := 12 - statusWidth
+	remaining := 14 - statusWidth
 	leftPad := remaining / 2
 	rightPad := remaining - leftPad
 	padStatus := strings.Repeat(" ", leftPad) + combinedStatus + strings.Repeat(" ", rightPad)

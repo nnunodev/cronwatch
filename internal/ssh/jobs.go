@@ -3,8 +3,8 @@ package ssh
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
-	"log"
 	"os/exec"
 	"sort"
 	"strings"
@@ -26,24 +26,31 @@ type Config struct {
 }
 
 type Job struct {
-	ID            string
-	Name          string
-	ScheduleExpr  string
-	Schedule string // "daily 9:00", "twice (11:00, 16:00)", etc.
-	NextRunAt    string
-	NextRun  string // "in 2h 30m"
-	Deliver       string
-	DeliverTag    string
-	LastRun       string
-	LastState     string
+	ID            string // e.g. "4bde57c2ee7a"
+	Name          string // "Hermes Memory Backup"
+	State         string // "scheduled", "running", "paused"
+	Schedule      string // human: "daily 9:00"
+	ScheduleExpr  string // raw: "0 9 * * *"
+	NextRun       string // human: "in 2h 30m"
+	NextRunAt     string // raw ISO: "2026-04-10T03:00:00+01:00"
+	LastRunAt     string // raw ISO: "2026-04-09T03:01:00+01:00"
+	LastRunAtH    string // human: "09:01", relative "today 03:01"
+	LastState     string // "ok", "error", "running"
+	LastError     string // error message if LastState == "error"
+	Deliver       string // full: "discord:1488469942272790629"
+	DeliverTag    string // short: "discord"
+	RepeatTimes   *int64 // null if unlimited
+	RepeatDone    int64  // completed run count
+	Enabled       bool
 }
 
+// FetchJobs fetches job list from Hermes via SSH, parsing the jobs.json dump
 func FetchJobs(cfg Config) ([]Job, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.Timeout)*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx,
-		"ssh",
+	// Dump jobs.json as clean JSON over SSH — avoids text parsing entirely
+	cmd := exec.CommandContext(ctx, "ssh",
 		"-o", "StrictHostKeyChecking=no",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "BatchMode=yes",
@@ -55,7 +62,7 @@ func FetchJobs(cfg Config) ([]Job, error) {
 	}
 	cmd.Args = append(cmd.Args,
 		fmt.Sprintf("%s@%s", cfg.User, cfg.Host),
-		"hermes cron list",
+		"python3 -c \"import json; print(json.dumps(json.load(open('/root/.hermes/cron/jobs.json'))))\"",
 	)
 
 	var out bytes.Buffer
@@ -72,116 +79,116 @@ func FetchJobs(cfg Config) ([]Job, error) {
 	return ParseJobs(out.String())
 }
 
+// rawJob matches the Hermes jobs.json structure
+type rawJob struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	State    string `json:"state"`
+	Enabled  bool   `json:"enabled"`
+	Schedule struct {
+		Expr    string `json:"expr"`
+		Display string `json:"display"`
+	} `json:"schedule"`
+	ScheduleDisplay string  `json:"schedule_display"`
+	NextRunAt       string  `json:"next_run_at"`
+	LastRunAt       string  `json:"last_run_at"`
+	LastStatus      string  `json:"last_status"`
+	LastError       *string `json:"last_error"`
+	Deliver         string  `json:"deliver"`
+	Repeat          struct {
+		Times     *int64 `json:"times"`
+		Completed int64  `json:"completed"`
+	} `json:"repeat"`
+}
+
+type rawJobs struct {
+	Jobs []rawJob `json:"jobs"`
+}
+
 func ParseJobs(raw string) ([]Job, error) {
-	lines := strings.Split(raw, "\n")
-	var jobs []Job
-	var buf bytes.Buffer
-
-	for _, line := range lines {
-		stripped := strings.TrimSpace(line)
-
-		// Skip box-drawing characters
-		if strings.HasPrefix(line, "┌") || strings.HasPrefix(line, "└") ||
-			strings.HasPrefix(line, "│") {
-			continue
-		}
-
-		if stripped == "" {
-			if buf.Len() > 0 {
-				if job, err := parseJobBlock(buf.String()); err == nil && job.Name != "" {
-					jobs = append(jobs, job)
-				}
-				buf.Reset()
-			}
-			continue
-		}
-
-		if strings.HasPrefix(stripped, "Scheduled Jobs") {
-			continue
-		}
-
-		// Job ID line starts with numeric ID and contains [active]
-		if len(stripped) >= 13 && strings.Contains(stripped, "[active]") {
-			if buf.Len() > 0 {
-				if job, err := parseJobBlock(buf.String()); err == nil && job.Name != "" {
-					jobs = append(jobs, job)
-				}
-				buf.Reset()
-			}
-			id := strings.Fields(stripped)[0]
-			buf.WriteString("ID: " + id + "\n")
-			continue
-		}
-
-		if strings.HasPrefix(stripped, "Name:") {
-			buf.WriteString(strings.TrimPrefix(stripped, "Name:") + "\n")
-			continue
-		}
-		if strings.HasPrefix(stripped, "Schedule:") {
-			buf.WriteString("SCHEDULE|" + strings.TrimPrefix(stripped, "Schedule:") + "\n")
-			continue
-		}
-		if strings.HasPrefix(stripped, "Next run:") {
-			buf.WriteString("NEXT|" + strings.TrimPrefix(stripped, "Next run:") + "\n")
-			continue
-		}
-		if strings.HasPrefix(stripped, "Deliver:") {
-			buf.WriteString("DELIVER|" + strings.TrimPrefix(stripped, "Deliver:") + "\n")
-			continue
-		}
-		if strings.HasPrefix(stripped, "Last run:") {
-			buf.WriteString("LAST|" + strings.TrimPrefix(stripped, "Last run:") + "\n")
-			continue
-		}
+	var rj rawJobs
+	if err := json.Unmarshal([]byte(raw), &rj); err != nil {
+		return nil, fmt.Errorf("failed to parse jobs.json: %w", err)
 	}
 
-	if buf.Len() > 0 {
-		if job, err := parseJobBlock(buf.String()); err == nil && job.Name != "" {
-			jobs = append(jobs, job)
+	jobs := make([]Job, 0, len(rj.Jobs))
+	for _, r := range rj.Jobs {
+		if !r.Enabled {
+			continue
 		}
+		j := Job{
+			ID:           r.ID,
+			Name:         r.Name,
+			State:        r.State,
+			ScheduleExpr: r.Schedule.Expr,
+			NextRunAt:    r.NextRunAt,
+			LastRunAt:    r.LastRunAt,
+			LastState:    r.LastStatus,
+			RepeatTimes:  r.Repeat.Times,
+			RepeatDone:   r.Repeat.Completed,
+			Enabled:      r.Enabled,
+		}
+
+		// Schedule human
+		if r.ScheduleDisplay != "" {
+			j.Schedule = cronToHuman(r.Schedule.Expr)
+			if j.Schedule == r.Schedule.Expr {
+				j.Schedule = r.ScheduleDisplay
+			}
+		} else {
+			j.Schedule = cronToHuman(r.Schedule.Expr)
+		}
+
+		// Next run human
+		j.NextRun = humanDuration(j.NextRunAt)
+
+		// Last run human (relative time + clock)
+		j.LastRunAtH = lastRunHuman(j.LastRunAt)
+
+		// Last error
+		if r.LastError != nil {
+			j.LastError = *r.LastError
+		}
+
+		// Deliver tag
+		j.Deliver = r.Deliver
+		j.DeliverTag = deliverTag(r.Deliver)
+
+		jobs = append(jobs, j)
 	}
 
-	jobs = sortJobsByNextRun(jobs)
+	jobs = sortJobs(jobs)
 	return jobs, nil
 }
 
-func parseJobBlock(block string) (Job, error) {
-	job := Job{}
-	lines := strings.Split(block, "\n")
-	for _, line := range lines {
-		if strings.HasPrefix(line, "ID:") {
-			job.ID = strings.TrimSpace(strings.TrimPrefix(line, "ID:"))
-		} else if strings.HasPrefix(line, "SCHEDULE|") {
-			job.ScheduleExpr = strings.TrimSpace(strings.TrimPrefix(line, "SCHEDULE|"))
-			job.Schedule = cronToHuman(job.ScheduleExpr)
-		} else if strings.HasPrefix(line, "NEXT|") {
-			nextRaw := strings.TrimSpace(strings.TrimPrefix(line, "NEXT|"))
-			job.NextRunAt = nextRaw
-			job.NextRun = humanDuration(nextRaw)
-		} else if strings.HasPrefix(line, "DELIVER|") {
-			job.Deliver = strings.TrimSpace(strings.TrimPrefix(line, "DELIVER|"))
-			job.DeliverTag = deliverTag(job.Deliver)
-		} else if strings.HasPrefix(line, "LAST|") {
-			val := strings.TrimPrefix(line, "LAST|")
-			parts := strings.SplitN(val, "  ", 2)
-			job.LastRun = strings.TrimSpace(parts[0])
-			if len(parts) >= 2 {
-				state := strings.TrimSpace(parts[1])
-				if strings.HasPrefix(state, "ok") {
-					job.LastState = "ok"
-				} else if strings.HasPrefix(state, "error") {
-					job.LastState = "error"
-				} else {
-					job.LastState = state
-				}
-			}
-		} else if line != "" {
-			job.Name += line + " "
+// sortJobs: running first, then by NextRunAt ascending
+func sortJobs(jobs []Job) []Job {
+	sorted := make([]Job, len(jobs))
+	copy(sorted, jobs)
+	sort.Slice(sorted, func(i, j int) bool {
+		// Running always first
+		if sorted[i].State == "running" && sorted[j].State != "running" {
+			return true
 		}
-	}
-
-	job.Name = strings.TrimSpace(job.Name)
-	return job, nil
+		if sorted[i].State != "running" && sorted[j].State == "running" {
+			return false
+		}
+		// Both running: sort by NextRunAt
+		if sorted[i].State == "running" && sorted[j].State == "running" {
+			return sorted[i].NextRunAt < sorted[j].NextRunAt
+		}
+		// Otherwise: sort by NextRunAt ascending
+		ti, err := time.Parse(time.RFC3339, sorted[i].NextRunAt)
+		if err != nil {
+			return false
+		}
+		tj, err := time.Parse(time.RFC3339, sorted[j].NextRunAt)
+		if err != nil {
+			return true
+		}
+		return ti.Before(tj)
+	})
+	return sorted
 }
 
 // cronToHuman converts cron expr to human-readable string
@@ -197,12 +204,9 @@ func cronToHuman(schedule string) string {
 	month := fields[3]
 	dow := fields[4]
 
-	// every X hours: 0 */12 * * * → "every 12h"
 	if min == "0" && strings.HasPrefix(hour, "*/") {
 		return fmt.Sprintf("every %sh", strings.TrimPrefix(hour, "*/"))
 	}
-
-	// twice daily: 0 11,16 * * * → "twice (11:00, 16:00)"
 	if min == "0" && strings.Contains(hour, ",") {
 		var formatted []string
 		for _, p := range strings.Split(hour, ",") {
@@ -213,20 +217,15 @@ func cronToHuman(schedule string) string {
 		}
 		return "twice (" + strings.Join(formatted, ", ") + ")"
 	}
-
-	// weekly: dom=* month=* dow=something
 	if dom == "*" && month == "*" && dow != "*" {
 		return fmt.Sprintf("weekly (%s)", dow)
 	}
-
-	// daily at time: 0 9 * * * → "daily 9:00"
 	if dom == "*" && month == "*" && dow == "*" {
 		if min == "0" {
 			return fmt.Sprintf("daily %s:00", hour)
 		}
 		return fmt.Sprintf("daily %s:%s", hour, min)
 	}
-
 	return schedule
 }
 
@@ -255,7 +254,6 @@ func humanDuration(ts string) string {
 		}
 		return fmt.Sprintf("in %dd", d)
 	}
-
 	if h > 0 {
 		if m > 0 {
 			return fmt.Sprintf("in %dh %dm", h, m)
@@ -266,6 +264,33 @@ func humanDuration(ts string) string {
 		return fmt.Sprintf("in %dm", m)
 	}
 	return "in <1m"
+}
+
+// lastRunHuman returns a compact relative + clock representation
+// e.g. "today 03:01" or "yesterday 14:05" or just the time if more than 2 days ago
+func lastRunHuman(ts string) string {
+	t, err := time.Parse("2006-01-02T15:04:05Z07:00", ts)
+	if err != nil {
+		t, err = time.Parse(time.RFC3339, ts)
+		if err != nil {
+			return ts
+		}
+	}
+
+	now := time.Now()
+	diff := now.Sub(t)
+
+	clock := t.In(now.Location()).Format("15:04")
+	if diff < 24*time.Hour {
+		return "today " + clock
+	}
+	if diff < 48*time.Hour {
+		return "yesterday " + clock
+	}
+	if diff < 7*24*time.Hour {
+		return fmt.Sprintf("%dd ago %s", int(diff.Hours()/24), clock)
+	}
+	return clock
 }
 
 func deliverTag(d string) string {
@@ -282,6 +307,7 @@ func deliverTag(d string) string {
 	return d
 }
 
+// RenderSimple prints jobs in plain terminal format
 func RenderSimple(jobs []Job) {
 	orange := lipgloss.NewStyle().Foreground(lipgloss.Color("#f97316")).Bold(true)
 	muted := lipgloss.NewStyle().Foreground(lipgloss.Color("#6b7280"))
@@ -289,44 +315,26 @@ func RenderSimple(jobs []Job) {
 	cyan := lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee"))
 	green := lipgloss.NewStyle().Foreground(lipgloss.Color("#10b981")).Bold(true)
 	red := lipgloss.NewStyle().Foreground(lipgloss.Color("#f87171")).Bold(true)
+	blue := lipgloss.NewStyle().Foreground(lipgloss.Color("#60a5fa")).Bold(true)
 
 	fmt.Println()
 	fmt.Println(orange.Render("  SCHEDULED JOBS"))
-	fmt.Println(muted.Render("  " + strings.Repeat("─", 65)))
+	fmt.Println(muted.Render("  " + strings.Repeat("─", 70)))
+
 	for _, j := range jobs {
 		state := green.Render("ok")
-		if j.LastState == "error" {
-			state = red.Render("error")
+		statePrefix := "  "
+		if j.State == "running" {
+			state = blue.Render("running")
+			statePrefix = "● "
+		} else if j.LastState == "error" || j.State == "paused" {
+			state = red.Render(j.LastState)
+			statePrefix = "● "
 		}
-		fmt.Printf("  %-45s %s  %s\n", j.Name, amber.Render(j.Schedule), cyan.Render(j.NextRun))
-		fmt.Printf("  %s  %s\n\n", muted.Render("→ "+j.DeliverTag), state)
-	}
-}
 
-// sortJobsByNextRun sorts jobs by NextRun ascending (soonest first)
-func sortJobsByNextRun(jobs []Job) []Job {
-	sorted := make([]Job, len(jobs))
-	copy(sorted, jobs)
-	sort.Slice(sorted, func(i, j int) bool {
-		ti, err := time.Parse(time.RFC3339, sorted[i].NextRunAt)
-		if err != nil {
-			ti2, err2 := time.Parse("2006-01-02T15:04:05Z07:00", sorted[i].NextRunAt)
-			if err2 != nil {
-				log.Printf("sort: could not parse NextRun %q for job %q: %v", sorted[i].NextRunAt, sorted[i].Name, err2)
-				return false
-			}
-			ti = ti2
-		}
-		tj, err := time.Parse(time.RFC3339, sorted[j].NextRunAt)
-		if err != nil {
-			tj2, err2 := time.Parse("2006-01-02T15:04:05Z07:00", sorted[j].NextRunAt)
-			if err2 != nil {
-				log.Printf("sort: could not parse NextRun %q for job %q: %v", sorted[j].NextRunAt, sorted[j].Name, err2)
-				return false
-			}
-			tj = tj2
-		}
-		return ti.Before(tj)
-	})
-	return sorted
+		triggered := muted.Render("triggered " + j.LastRunAtH)
+
+		fmt.Printf("  %-48s %s  %s\n", j.Name, amber.Render(j.Schedule), cyan.Render(j.NextRun))
+		fmt.Printf("  %s %s\n\n", statePrefix+state, triggered)
+	}
 }

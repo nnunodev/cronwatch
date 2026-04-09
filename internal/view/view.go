@@ -10,6 +10,8 @@ import (
 	"github.com/nnunodev/cronwatch/internal/ssh"
 )
 
+type RefreshTickMsg struct{}
+
 type Model struct {
 	jobs           []ssh.Job
 	isLoading     bool
@@ -20,8 +22,6 @@ type Model struct {
 	refreshSec    int
 	refreshFrame  int
 }
-type RefreshTickMsg struct{}
-
 
 func NewModel(cfg ssh.Config, refreshSec int) *Model {
 	return &Model{
@@ -53,6 +53,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.isLoading = false
 		m.lastError = ""
 		m.lastRefresh = time.Now().Format("15:04:05")
+		// Reset selection if out of bounds
+		if m.selectedIndex >= len(m.jobs) {
+			m.selectedIndex = 0
+		}
 		if m.refreshSec > 0 {
 			return m, m.autoRefresh()
 		}
@@ -101,19 +105,20 @@ func (m *Model) autoRefresh() tea.Cmd {
 // ─── Styles ───────────────────────────────────────────────────────────────
 
 var (
-	bg          = lipgloss.NewStyle().Background(lipgloss.Color("#0b1020"))
-	muted       = lipgloss.NewStyle().Foreground(lipgloss.Color("#4b5563"))
-	dimText     = lipgloss.NewStyle().Foreground(lipgloss.Color("#6b7280"))
-	white       = lipgloss.NewStyle().Foreground(lipgloss.Color("#e5e7eb"))
-	whiteBold   = lipgloss.NewStyle().Foreground(lipgloss.Color("#f9fafb")).Bold(true)
-	orange      = lipgloss.NewStyle().Foreground(lipgloss.Color("#f97316")).Bold(true)
-	cyan        = lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee"))
-	amber       = lipgloss.NewStyle().Foreground(lipgloss.Color("#fbbf24"))
-	green       = lipgloss.NewStyle().Foreground(lipgloss.Color("#10b981"))
-	greenBold   = lipgloss.NewStyle().Foreground(lipgloss.Color("#10b981")).Bold(true)
-	red         = lipgloss.NewStyle().Foreground(lipgloss.Color("#f87171")).Bold(true)
-	accent      = lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee"))
-	tagStyle    = lipgloss.NewStyle().
+	bg            = lipgloss.NewStyle().Background(lipgloss.Color("#0b1020"))
+	muted         = lipgloss.NewStyle().Foreground(lipgloss.Color("#4b5563"))
+	dimText       = lipgloss.NewStyle().Foreground(lipgloss.Color("#6b7280"))
+	white         = lipgloss.NewStyle().Foreground(lipgloss.Color("#e5e7eb"))
+	whiteBold     = lipgloss.NewStyle().Foreground(lipgloss.Color("#f9fafb")).Bold(true)
+	orange        = lipgloss.NewStyle().Foreground(lipgloss.Color("#f97316")).Bold(true)
+	cyan          = lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee"))
+	amber         = lipgloss.NewStyle().Foreground(lipgloss.Color("#fbbf24"))
+	green         = lipgloss.NewStyle().Foreground(lipgloss.Color("#10b981"))
+	greenBold     = lipgloss.NewStyle().Foreground(lipgloss.Color("#10b981")).Bold(true)
+	red           = lipgloss.NewStyle().Foreground(lipgloss.Color("#f87171")).Bold(true)
+	blue          = lipgloss.NewStyle().Foreground(lipgloss.Color("#60a5fa")).Bold(true)
+	accent        = lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee"))
+	tagStyle      = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#d1d5db")).
 			Background(lipgloss.Color("#1f2937")).
 			Padding(0, 1).
@@ -121,6 +126,11 @@ var (
 	tagErrorStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#fecaca")).
 			Background(lipgloss.Color("#7f1d1d")).
+			Padding(0, 1).
+			MarginLeft(1)
+	tagRunningStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#bfdbfe")).
+			Background(lipgloss.Color("#1e3a5f")).
 			Padding(0, 1).
 			MarginLeft(1)
 )
@@ -149,18 +159,20 @@ func (m *Model) jobsView() string {
 	// Column labels
 	b.WriteString(bg.Render(" "))
 	b.WriteString(dimText.Render("  "))
-	b.WriteString(whiteBold.Render(pad("JOB", 38)))
+	b.WriteString(whiteBold.Render(pad("JOB", 36)))
 	b.WriteString(dimText.Render("  "))
 	b.WriteString(whiteBold.Render("NEXT"))
 	b.WriteString(dimText.Render("   "))
 	b.WriteString(whiteBold.Render(center("EVERY", 13)))
 	b.WriteString(dimText.Render("  "))
 	b.WriteString(whiteBold.Render(center("STATUS", 7)))
+	b.WriteString(dimText.Render("  "))
+	b.WriteString(whiteBold.Render("TRIGGERED"))
 	b.WriteString(bg.Render("\n"))
 
 	// Divider
 	b.WriteString(bg.Render(" "))
-	b.WriteString(dimText.Render("  " + strings.Repeat("─", 38) + "  " + strings.Repeat("─", 9) + "  " + center(strings.Repeat("─", 13), 13) + "  " + center(strings.Repeat("─", 7), 7)))
+	b.WriteString(dimText.Render("  " + strings.Repeat("─", 36) + "  " + strings.Repeat("─", 9) + "  " + strings.Repeat("─", 13) + "  " + strings.Repeat("─", 7) + "  " + strings.Repeat("─", 24)))
 	b.WriteString(bg.Render("\n"))
 
 	// Jobs
@@ -181,22 +193,29 @@ func (m *Model) jobsView() string {
 }
 
 func jobRow(job ssh.Job, selected bool) string {
-	// Status
-	dot := greenBold.Render("●")
-	statusText := greenBold.Render("ok")
-	if job.LastState == "error" {
+	// State + status
+	var dot, statusText, tag string
+	if job.State == "running" {
+		dot = blue.Render("●")
+		statusText = blue.Render("running")
+		tag = tagRunningStyle.Render("RUNNING")
+	} else if job.LastState == "error" {
 		dot = red.Render("●")
 		statusText = red.Render("error")
-	}
-
-	// Target tag
-	tag := tagStyle.Render(job.DeliverTag)
-	if job.LastState == "error" {
 		tag = tagErrorStyle.Render("✗")
+	} else {
+		dot = greenBold.Render("●")
+		statusText = greenBold.Render("ok")
+		tag = tagStyle.Render(job.DeliverTag)
 	}
 
-	// Every column
-	every := job.Schedule
+	// Next run column
+	var nextDisplay string
+	if job.State == "running" {
+		nextDisplay = blue.Render("RUNNING")
+	} else {
+		nextDisplay = cyan.Render(pad(job.NextRun, 9))
+	}
 
 	// Name
 	nameStyle := white
@@ -209,16 +228,24 @@ func jobRow(job ssh.Job, selected bool) string {
 		prefix = ">"
 	}
 
+	// Triggered column
+	triggered := dimText.Render("triggered " + job.LastRunAtH)
+	if selected {
+		triggered = accent.Render("triggered " + job.LastRunAtH)
+	}
+
 	return bg.Render(prefix) +
-		nameStyle.Render(pad(trunc(job.Name, 37), 38)) +
+		nameStyle.Render(pad(trunc(job.Name, 35), 36)) +
 		bg.Render("  ") +
-		cyan.Render(pad(job.NextRun, 9)) +
+		nextDisplay +
 		bg.Render("  ") +
-		amber.Render(pad(every, 13)) +
+		amber.Render(pad(job.Schedule, 13)) +
 		bg.Render("  ") +
 		dot +
 		statusText +
-		tag
+		tag +
+		bg.Render("  ") +
+		triggered
 }
 
 func (m *Model) loadingView() string {
@@ -259,6 +286,3 @@ func pad(s string, width int) string {
 	}
 	return s + strings.Repeat(" ", width-len(runes))
 }
-
-
-

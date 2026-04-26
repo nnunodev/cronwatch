@@ -2,6 +2,7 @@ package view
 
 import (
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -10,8 +11,10 @@ import (
 	"github.com/nnunodev/cronwatch/internal/ssh"
 )
 
-type RefreshTickMsg struct{}
 type tickMsg time.Time
+
+type JobsLoadedMsg struct{ Jobs []ssh.Job }
+type ErrorMsg struct{ Error string }
 
 func tickCmd() tea.Cmd {
 	return tea.Tick(250*time.Millisecond, func(t time.Time) tea.Msg {
@@ -21,13 +24,14 @@ func tickCmd() tea.Cmd {
 
 type Model struct {
 	jobs           []ssh.Job
-	isLoading     bool
-	lastRefresh   string
-	lastError     string
-	selectedIndex int
-	cfg           ssh.Config
-	refreshSec    int
-	refreshFrame  int
+	isLoading      bool
+	lastRefresh    string
+	lastError      string
+	selectedIndex  int
+	cfg            ssh.Config
+	refreshSec     int
+	refreshFrame   int
+	nextRefresh    time.Time
 }
 
 func NewModel(cfg ssh.Config, refreshSec int) *Model {
@@ -47,47 +51,45 @@ func (m *Model) fetchJobs() tea.Cmd {
 	return func() tea.Msg {
 		jobs, err := ssh.FetchJobs(m.cfg)
 		if err != nil {
-			return ssh.ErrorMsg{Error: err.Error()}
+			return ErrorMsg{Error: err.Error()}
 		}
-		return ssh.JobsLoadedMsg{Jobs: jobs}
+		return JobsLoadedMsg{Jobs: jobs}
 	}
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case ssh.JobsLoadedMsg:
+	case JobsLoadedMsg:
 		m.jobs = msg.Jobs
 		m.isLoading = false
 		m.lastError = ""
 		m.lastRefresh = time.Now().Format("15:04:05")
-		// Reset selection if out of bounds
 		if m.selectedIndex >= len(m.jobs) {
 			m.selectedIndex = 0
 		}
 		if m.refreshSec > 0 {
-			return m, m.autoRefresh()
+			m.nextRefresh = time.Now().Add(time.Duration(m.refreshSec) * time.Second)
 		}
 		return m, nil
 
-	case ssh.ErrorMsg:
+	case ErrorMsg:
 		m.lastError = msg.Error
 		m.isLoading = false
+		if m.refreshSec > 0 {
+			m.nextRefresh = time.Now().Add(time.Duration(m.refreshSec) * time.Second)
+		}
 		return m, nil
 
 	case tickMsg:
 		if m.isLoading {
 			m.refreshFrame++
-			return m, tickCmd()
 		}
-		return m, nil
-
-	case RefreshTickMsg:
-		m.refreshFrame++
-		if !m.isLoading && m.refreshSec > 0 {
+		if !m.isLoading && m.refreshSec > 0 && time.Now().After(m.nextRefresh) {
 			m.isLoading = true
-			return m, m.fetchJobs()
+			m.refreshFrame = 0
+			return m, tea.Batch(m.fetchJobs(), tickCmd())
 		}
-		return m, nil
+		return m, tickCmd()
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -100,9 +102,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selectedIndex--
 			}
 		case "r":
-			m.isLoading = true
-			m.refreshFrame = 0
-			return m, m.fetchJobs()
+			if !m.isLoading {
+				m.isLoading = true
+				m.refreshFrame = 0
+				return m, m.fetchJobs()
+			}
 		case "q", "ctrl+c", "esc":
 			return m, tea.Quit
 		}
@@ -110,28 +114,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) autoRefresh() tea.Cmd {
-	return tea.Tick(time.Duration(m.refreshSec)*time.Second, func(t time.Time) tea.Msg {
-		return RefreshTickMsg{}
-	})
-}
-
 // ─── Styles ───────────────────────────────────────────────────────────────
 
 var (
-	bg            = lipgloss.NewStyle().Background(lipgloss.Color("#0b1020"))
-	muted         = lipgloss.NewStyle().Foreground(lipgloss.Color("#4b5563"))
-	dimText       = lipgloss.NewStyle().Foreground(lipgloss.Color("#6b7280"))
-	white         = lipgloss.NewStyle().Foreground(lipgloss.Color("#e5e7eb"))
-	whiteBold     = lipgloss.NewStyle().Foreground(lipgloss.Color("#f9fafb")).Bold(true)
-	orange        = lipgloss.NewStyle().Foreground(lipgloss.Color("#f97316")).Bold(true)
-	cyan          = lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee"))
-	amber         = lipgloss.NewStyle().Foreground(lipgloss.Color("#fbbf24"))
-	green         = lipgloss.NewStyle().Foreground(lipgloss.Color("#10b981"))
-	greenBold     = lipgloss.NewStyle().Foreground(lipgloss.Color("#10b981")).Bold(true)
-	red           = lipgloss.NewStyle().Foreground(lipgloss.Color("#f87171")).Bold(true)
-	blue          = lipgloss.NewStyle().Foreground(lipgloss.Color("#60a5fa")).Bold(true)
-	accent        = lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee"))
+	muted     = lipgloss.NewStyle().Foreground(lipgloss.Color("#4b5563"))
+	dimText   = lipgloss.NewStyle().Foreground(lipgloss.Color("#6b7280"))
+	white     = lipgloss.NewStyle().Foreground(lipgloss.Color("#e5e7eb"))
+	whiteBold = lipgloss.NewStyle().Foreground(lipgloss.Color("#f9fafb")).Bold(true)
+	orange    = lipgloss.NewStyle().Foreground(lipgloss.Color("#f97316")).Bold(true)
+	cyan      = lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee"))
+	amber     = lipgloss.NewStyle().Foreground(lipgloss.Color("#fbbf24"))
+	green     = lipgloss.NewStyle().Foreground(lipgloss.Color("#10b981"))
+	greenBold = lipgloss.NewStyle().Foreground(lipgloss.Color("#10b981")).Bold(true)
+	red       = lipgloss.NewStyle().Foreground(lipgloss.Color("#f87171")).Bold(true)
+	blue      = lipgloss.NewStyle().Foreground(lipgloss.Color("#60a5fa")).Bold(true)
+	accent    = lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee"))
 )
 
 // ─── View ─────────────────────────────────────────────────────────────────
@@ -149,14 +146,21 @@ func (m *Model) View() string {
 func (m *Model) jobsView() string {
 	var b strings.Builder
 
-	// Header
-	b.WriteString(bg.Render(" "))
-	b.WriteString(orange.Render("SCHEDULED JOBS"))
-	b.WriteString(dimText.Render("  ·  hyperion"))
-	b.WriteString(bg.Render("\n"))
+	if m.lastError != "" {
+		b.WriteString(red.Render("  ⚠ " + m.lastError))
+		b.WriteString("\n\n")
+	}
 
-	// Column labels
-	b.WriteString(bg.Render(" "))
+	b.WriteString(" ")
+	b.WriteString(orange.Render("SCHEDULED JOBS"))
+	if m.isLoading {
+		frames := []rune{'-', '\\', '|', '/'}
+		b.WriteString(cyan.Render(fmt.Sprintf("  ⟳ %c", frames[m.refreshFrame%4])))
+	}
+	b.WriteString(dimText.Render("  ·  " + m.cfg.Host))
+	b.WriteString("\n")
+
+	b.WriteString(" ")
 	b.WriteString(dimText.Render("  "))
 	b.WriteString(whiteBold.Render(pad("JOB", 36)))
 	b.WriteString(dimText.Render("  "))
@@ -167,32 +171,35 @@ func (m *Model) jobsView() string {
 	b.WriteString(whiteBold.Render(center("STATUS", 14)))
 	b.WriteString(dimText.Render("  "))
 	b.WriteString(whiteBold.Render(center("TRIGGERED", 14)))
-	b.WriteString(bg.Render("\n"))
+	b.WriteString("\n")
 
-	// Divider
-	b.WriteString(bg.Render(" "))
+	b.WriteString(" ")
 	b.WriteString(dimText.Render("  " + strings.Repeat("─", 36) + "  " + strings.Repeat("─", 10) + "  " + strings.Repeat("─", 15) + "  " + strings.Repeat("─", 14) + "  " + strings.Repeat("─", 14)))
-	b.WriteString(bg.Render("\n"))
+	b.WriteString("\n")
 
-	// Jobs
 	for i, job := range m.jobs {
 		b.WriteString(jobRow(job, i == m.selectedIndex))
-		b.WriteString(bg.Render("\n"))
+		b.WriteString("\n")
 	}
 
-	// Footer
-	b.WriteString(bg.Render("\n"))
-	b.WriteString(green.Render("● "+m.lastRefresh))
-	b.WriteString(dimText.Render("  ·  "))
-	b.WriteString(dimText.Render(fmt.Sprintf("%d jobs", len(m.jobs))))
-	b.WriteString(dimText.Render("  ·  ↑↓ navigate  r refresh  q quit"))
-	b.WriteString(bg.Render("\n"))
+	b.WriteString("\n")
+	if m.lastError != "" {
+		b.WriteString(red.Render("● " + m.lastRefresh + " · error"))
+		b.WriteString(dimText.Render("  ·  "))
+		b.WriteString(dimText.Render(fmt.Sprintf("%d jobs", len(m.jobs))))
+		b.WriteString(dimText.Render("  ·  ↑↓ navigate  r refresh  q quit"))
+	} else {
+		b.WriteString(green.Render("● " + m.lastRefresh))
+		b.WriteString(dimText.Render("  ·  "))
+		b.WriteString(dimText.Render(fmt.Sprintf("%d jobs", len(m.jobs))))
+		b.WriteString(dimText.Render("  ·  ↑↓ navigate  r refresh  q quit"))
+	}
+	b.WriteString("\n")
 
 	return b.String()
 }
 
 func jobRow(job ssh.Job, selected bool) string {
-	// State + status
 	var dot, statusText string
 	if job.State == "running" {
 		dot = blue.Render("●")
@@ -204,7 +211,6 @@ func jobRow(job ssh.Job, selected bool) string {
 		dot = greenBold.Render("●")
 		statusText = greenBold.Render("ok")
 	}
-	// Status column: center dot+text in 12-char field
 	combinedStatus := dot + statusText
 	statusWidth := lipgloss.Width(combinedStatus)
 	remaining := 14 - statusWidth
@@ -212,7 +218,6 @@ func jobRow(job ssh.Job, selected bool) string {
 	rightPad := remaining - leftPad
 	padStatus := strings.Repeat(" ", leftPad) + combinedStatus + strings.Repeat(" ", rightPad)
 
-	// Next run column
 	var nextDisplay string
 	if job.State == "running" {
 		nextDisplay = blue.Render(center("RUNNING", 10))
@@ -220,7 +225,6 @@ func jobRow(job ssh.Job, selected bool) string {
 		nextDisplay = cyan.Render(center(job.NextRun, 10))
 	}
 
-	// Name
 	nameStyle := white
 	if selected {
 		nameStyle = accent
@@ -231,34 +235,71 @@ func jobRow(job ssh.Job, selected bool) string {
 		prefix = ">"
 	}
 
-	// Triggered column
-	var triggered string
 	triggeredRaw := center(job.LastRunAtH, 14)
+	var triggered string
 	if selected {
 		triggered = accent.Render(triggeredRaw)
 	} else {
 		triggered = dimText.Render(triggeredRaw)
 	}
 
-	return bg.Render(prefix) +
+	var repeatProgress string
+	if job.RepeatTimes != nil && *job.RepeatTimes > 0 {
+		repeatProgress = dimText.Render(fmt.Sprintf(" [%d/%d]", job.RepeatDone, *job.RepeatTimes))
+	}
+
+	return prefix +
 		nameStyle.Render(pad(trunc(job.Name, 35), 36)) +
-		bg.Render("  ") +
+		"  " +
 		nextDisplay +
-		bg.Render("  ") +
+		"  " +
 		amber.Render(center(job.Schedule, 15)) +
-		bg.Render("  ") +
+		"  " +
 		padStatus +
-		bg.Render("  ") +
-		triggered
+		"  " +
+		triggered +
+		repeatProgress
 }
 
 func (m *Model) loadingView() string {
 	frames := []rune{'-', '\\', '|', '/'}
-	return bg.Render("\n\n  ") + cyan.Render(fmt.Sprintf("loading from hyperion %c", frames[m.refreshFrame%4])) + bg.Render("\n\n")
+	return "\n\n  " + cyan.Render(fmt.Sprintf("loading from %s %c", m.cfg.Host, frames[m.refreshFrame%4])) + "\n\n"
 }
 
 func (m *Model) errorView() string {
-	return bg.Render("\n  ") + red.Render("✗ "+m.lastError) + bg.Render("\n\n  ") + dimText.Render("r — retry  ·  q — quit\n\n")
+	return "\n  " + red.Render("✗ "+m.cfg.Host+": "+m.lastError) + "\n\n  " + dimText.Render("r — retry  ·  q — quit\n\n")
+}
+
+// RenderSimple prints jobs in plain terminal format.
+func RenderSimple(w io.Writer, jobs []ssh.Job) {
+	orange := lipgloss.NewStyle().Foreground(lipgloss.Color("#f97316")).Bold(true)
+	muted := lipgloss.NewStyle().Foreground(lipgloss.Color("#6b7280"))
+	amber := lipgloss.NewStyle().Foreground(lipgloss.Color("#fbbf24"))
+	cyan := lipgloss.NewStyle().Foreground(lipgloss.Color("#22d3ee"))
+	green := lipgloss.NewStyle().Foreground(lipgloss.Color("#10b981")).Bold(true)
+	red := lipgloss.NewStyle().Foreground(lipgloss.Color("#f87171")).Bold(true)
+	blue := lipgloss.NewStyle().Foreground(lipgloss.Color("#60a5fa")).Bold(true)
+
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, orange.Render("  SCHEDULED JOBS"))
+	fmt.Fprintln(w, muted.Render("  "+strings.Repeat("─", 70)))
+
+	for _, j := range jobs {
+		state := green.Render("ok")
+		statePrefix := "  "
+		if j.State == "running" {
+			state = blue.Render("running")
+			statePrefix = "● "
+		} else if j.LastState == "error" || j.State == "paused" {
+			state = red.Render(j.LastState)
+			statePrefix = "● "
+		}
+
+		triggered := muted.Render(j.LastRunAtH)
+
+		fmt.Fprintf(w, "  %-48s %s  %s\n", j.Name, amber.Render(j.Schedule), cyan.Render(j.NextRun))
+		fmt.Fprintf(w, "  %s %s\n\n", statePrefix+state, triggered)
+	}
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────

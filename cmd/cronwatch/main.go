@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	osuser "os/user"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/nnunodev/cronwatch/internal/ssh"
@@ -13,12 +14,12 @@ import (
 var version = "dev"
 
 func main() {
-	host := flag.String("host", "hyperion", "SSH host alias or IP")
+	host := flag.String("host", "", "SSH host alias or IP (required)")
 	user := flag.String("user", "", "SSH user")
 	port := flag.Int("port", 0, "SSH port")
 	key := flag.String("key", "", "SSH private key path")
 	simple := flag.Bool("simple", false, "Simple terminal output")
-	refresh := flag.Int("refresh", 10, "Auto-refresh interval in seconds (0=disabled)")
+	refresh := flag.Int("refresh", 10, "Auto-refresh interval in seconds (0=disable)")
 	timeout := flag.Int("timeout", 10, "SSH command timeout in seconds")
 	showVersion := flag.Bool("version", false, "Show version and exit")
 	flag.Parse()
@@ -26,6 +27,18 @@ func main() {
 	if *showVersion {
 		fmt.Printf("cronwatch %s\n", version)
 		return
+	}
+
+	if *host == "" {
+		fmt.Fprintln(os.Stderr, "Error: --host is required")
+		os.Exit(1)
+	}
+	if *timeout <= 0 {
+		fmt.Fprintln(os.Stderr, "Error: --timeout must be > 0")
+		os.Exit(1)
+	}
+	if *refresh < 0 {
+		*refresh = 0
 	}
 
 	// Track which flags were explicitly set by the user so SSH config
@@ -62,10 +75,16 @@ func main() {
 
 	// Final fallback defaults
 	if cfg.User == "" {
-		cfg.User = "nuno"
+		if u, err := osuser.Current(); err == nil {
+			cfg.User = u.Username
+		}
 	}
 	if cfg.Port == 0 {
 		cfg.Port = 22
+	}
+	if cfg.User == "" {
+		fmt.Fprintln(os.Stderr, "Error: could not determine SSH user (set --user or add User to ~/.ssh/config)")
+		os.Exit(1)
 	}
 
 	if *simple {
@@ -74,14 +93,14 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
-		ssh.RenderSimple(jobs)
+		view.RenderSimple(os.Stdout, jobs)
 		return
 	}
 
 	model := view.NewModel(cfg, *refresh)
-	p := tea.NewProgram(model)
+	p := tea.NewProgram(model, tea.WithAltScreen())
 
-	if err := p.Start(); err != nil {
+	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}

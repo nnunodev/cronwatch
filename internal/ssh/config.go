@@ -53,7 +53,8 @@ func ReadSSHConfig(host string) (*SSHHostConfig, error) {
 			if result == nil {
 				for _, h := range currentHosts {
 					if matchSSHHost(host, h) {
-						result = &current
+						captured := current
+						result = &captured
 						break
 					}
 				}
@@ -90,7 +91,8 @@ func ReadSSHConfig(host string) (*SSHHostConfig, error) {
 	if result == nil {
 		for _, h := range currentHosts {
 			if matchSSHHost(host, h) {
-				result = &current
+				captured := current
+				result = &captured
 				break
 			}
 		}
@@ -103,7 +105,8 @@ func ReadSSHConfig(host string) (*SSHHostConfig, error) {
 }
 
 // matchSSHHost checks if target matches a single OpenSSH Host pattern.
-// Supports literal match and simple prefix wildcard (e.g. "hyperion*").
+// Supports literal match, prefix wildcard (e.g. "hyperion*"),
+// suffix wildcard (e.g. "*server"), and contains wildcard (e.g. "*hyperion*").
 // Ignores the global "*" wildcard so we don't return a catch-all block.
 func matchSSHHost(target, pattern string) bool {
 	// Skip the global catch-all

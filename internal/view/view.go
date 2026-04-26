@@ -11,6 +11,13 @@ import (
 )
 
 type RefreshTickMsg struct{}
+type tickMsg time.Time
+
+func tickCmd() tea.Cmd {
+	return tea.Tick(250*time.Millisecond, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
+}
 
 type Model struct {
 	jobs           []ssh.Job
@@ -33,7 +40,7 @@ func NewModel(cfg ssh.Config, refreshSec int) *Model {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return m.fetchJobs()
+	return tea.Batch(m.fetchJobs(), tickCmd())
 }
 
 func (m *Model) fetchJobs() tea.Cmd {
@@ -65,6 +72,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ssh.ErrorMsg:
 		m.lastError = msg.Error
 		m.isLoading = false
+		return m, nil
+
+	case tickMsg:
+		if m.isLoading {
+			m.refreshFrame++
+			return m, tickCmd()
+		}
 		return m, nil
 
 	case RefreshTickMsg:

@@ -50,11 +50,18 @@ func FetchJobs(cfg Config) ([]Job, error) {
 	defer cancel()
 
 	// Dump jobs.json as clean JSON over SSH — avoids text parsing entirely
+	connectTimeout := cfg.Timeout / 2
+	if connectTimeout < 2 {
+		connectTimeout = 2
+	}
 	cmd := exec.CommandContext(ctx, "ssh",
 		"-o", "StrictHostKeyChecking=no",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "BatchMode=yes",
 		"-o", "LogLevel=ERROR",
+		"-o", fmt.Sprintf("ConnectTimeout=%d", connectTimeout),
+		"-o", "ServerAliveInterval=5",
+		"-o", "ServerAliveCountMax=2",
 		"-p", fmt.Sprintf("%d", cfg.Port),
 	)
 	if cfg.KeyPath != "" {
@@ -62,16 +69,19 @@ func FetchJobs(cfg Config) ([]Job, error) {
 	}
 	cmd.Args = append(cmd.Args,
 		fmt.Sprintf("%s@%s", cfg.User, cfg.Host),
-		"python3 -c \"import json; print(json.dumps(json.load(open('/root/.hermes/cron/jobs.json'))))\"",
+		"python3 -c \"import json, os; print(json.dumps(json.load(open(os.path.expanduser('~/.hermes/cron/jobs.json')))))\"",
 	)
 
-	var out bytes.Buffer
+	var out, stderr bytes.Buffer
 	cmd.Stdout = &out
-	cmd.Stderr = bytes.NewBuffer(nil)
+	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return nil, fmt.Errorf("ssh timeout after %ds", cfg.Timeout)
+			return nil, fmt.Errorf("ssh timeout after %ds (host: %s:%d)", cfg.Timeout, cfg.Host, cfg.Port)
+		}
+		if stderr.Len() > 0 {
+			return nil, fmt.Errorf("ssh failed: %w (stderr: %s)", err, strings.TrimSpace(stderr.String()))
 		}
 		return nil, fmt.Errorf("ssh failed: %w", err)
 	}

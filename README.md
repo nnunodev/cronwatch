@@ -34,27 +34,31 @@ Requires Go 1.21+.
 
 ## SSH setup
 
-cronwatch SSHes to your Hermes host to fetch job data. It needs passwordless SSH access:
+cronwatch reads your `~/.ssh/config` automatically, so the preferred way to configure access is a `Host hyperion` block. Create this on **both** your Linux and Windows machines:
 
 ```bash
 # Add to ~/.ssh/config on the machine running cronwatch
 Host hyperion
-  HostName 100.102.146.36
-  User root
+  HostName 100.96.7.92
+  User nuno
   IdentityFile ~/.ssh/id_ed25519
   StrictHostKeyChecking no
   UserKnownHostsFile /dev/null
 ```
 
-Or use the `--key` flag to point to a specific key.
+After that, just run `cronwatch` — no flags needed.
+
+If you prefer flags, `--key` and the other SSH flags still work and always override anything in `~/.ssh/config`.
+
+**Important:** On Windows, if your Linux `id_ed25519` is the one that works, copy that exact private key to Windows `~/.ssh/id_ed25519`. The public key must already be on the server (`~nuno/.ssh/authorized_keys`).
 
 ## Flags
 
 ```
---host string      Hyperion IP or hostname (default "100.102.146.36")
---user string      SSH user (default "root")
---port int         SSH port (default 22)
---key string       SSH private key path
+--host string      SSH host alias or IP (default "hyperion")
+--user string      SSH user (default: from ~/.ssh/config, then "nuno")
+--port int         SSH port (default: from ~/.ssh/config, then 22)
+--key string       SSH private key path (default: from ~/.ssh/config)
 --refresh int      Auto-refresh interval in seconds (default 10, 0=disabled)
 --timeout int      SSH command timeout in seconds (default 10)
 --simple           Plain terminal output instead of TUI
